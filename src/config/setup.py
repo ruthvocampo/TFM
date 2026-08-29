@@ -1,11 +1,5 @@
 from pathlib import Path
 
-from pyspark.sql import SparkSession
-
-
-
-STORAGE = spark.conf.get("adls.account.name")
-
 
 
 # Raíz del proyecto
@@ -14,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Data
 DATA_ROOT = PROJECT_ROOT / "data"
+DATA_ADDRESS = DATA_ROOT / "reference"
 
 HISTORICAL_ROOT = DATA_ROOT / "historical"
 SIMULATED_ROOT = DATA_ROOT / "simulated"
@@ -55,3 +50,4 @@ GOLD_SLA_RISK = GOLD_ROOT / "sla_risk"
 GOLD_DRIVER_PERFORMANCE = GOLD_ROOT / "driver_performance"
 GOLD_ZONE_PERFORMANCE = GOLD_ROOT / "zone_performance"
 GOLD_RECOMMENDATIONS = GOLD_ROOT / "recommendations"
+

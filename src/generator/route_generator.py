@@ -4,8 +4,7 @@ from config.setup import LANDING_ROOT
 from src.objects import Route
 
 class RouteGenerator:
-    def __init__(self, spark, drivers, orders):
-        self.spark = spark
+    def __init__(self,  drivers, orders):
         self.routes = []
         self.drivers = drivers
         self.orders = orders

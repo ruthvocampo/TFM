@@ -2,6 +2,7 @@ from src.generator.address_generator import AddressGenerator
 from src.generator.drivers_generator import DriverGenerator
 from src.generator.orders_generator import OrderGenerator
 from src.generator.history_generator import OrderHistoricalGenerator
+from src.generator.route_manager import RouteManager
 from src.config.setup import DATA_ADDRESS
 import pyspark
 
@@ -34,4 +35,8 @@ class Simulator:
         # Crear pedidos
         orders = order_generator.create_orders()
 
-        return orders, drivers  
+        # 5. Crear rutas
+        routes= RouteManager(drivers=drivers,orders=orders).create_routes()
+       
+
+        return orders, drivers, routes

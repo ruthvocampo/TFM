@@ -8,8 +8,13 @@ from src.objects.driver import Driver
 
 class DriverGenerator:
 
-    def __init__(self,drivers):
+    def __init__(self,drivers, address):
         self.drivers = drivers
+        self.address = address
+        
+        
+    def _get_postal_code(self):
+        return (self.address["PostalCode"].dropna().astype(str).str.strip().unique().tolist())
 
     def create_drivers(self,num_drivers):
 
@@ -25,7 +30,8 @@ class DriverGenerator:
                 available=random.choice(
                     [True, False]
                 ),
-                zone=random.randint(28001, 28054),
+                # codigos postales de madrid 28001 al 28054
+                zone=self._get_postal_code(),
             )
 
             self.drivers.append(driver)

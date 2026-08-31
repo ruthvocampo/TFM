@@ -11,7 +11,7 @@ class GPSEvents:
         return random.randint(1, 300)
 
     def id_driver(self):
-        df_drivers = self.drivers[self.drivers["Avability"] == True]
+        df_drivers = self.drivers[self.drivers["available"] == True]
 
         if df_drivers.empty:
             raise ValueError("No hay conductores disponibles")
@@ -44,5 +44,6 @@ class GPSEvents:
         }
 
         key = gps_event_id
-
+        print ("# REPARTIDOR : ", id_driver)
+        print (value)
         return key, value

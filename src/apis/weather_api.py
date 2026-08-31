@@ -3,14 +3,50 @@ import requests
 
 class WeatherApi:
 
+    def __init__(self):
+        self.url = "https://ciudadesabiertas.madrid.es/dynamicAPI/API/query/meteo_tiemporeal.json"
+
     def get_info(self):
-        url = "https://datos.madrid.es/dataset/300754-0-meteorologia-tiempo-real-acumula/resource/300754-1-meteorologia-tiempo-real-acumula-api/download/300754-1-meteorologia-tiempo-real-acumula-api.api"
 
-        try:
-            req = requests.get(url, timeout=10)
-            req.raise_for_status()
+        response = requests.get(
+            self.url,
+            params={
+                "pageSize": 100,
+                "page": 1
+            },
+            timeout=10
+        )
 
-            return req.json()
+        response.raise_for_status()
 
-        except requests.RequestException as e:
-            raise Exception(f"ERROR al conectar con la API: {e}")
+        data = response.json()
+
+        print("TIPO DE DATA:", type(data))
+
+        if isinstance(data, dict):
+            print("CAMPOS:")
+            for key, value in data.items():
+                print(
+                    key,
+                    "->",
+                    type(value),
+                    "->",
+                    value
+                )
+
+        elif isinstance(data, list):
+            print("NÚMERO DE ELEMENTOS:", len(data))
+
+            if data:
+                print("TIPO DEL PRIMER ELEMENTO:", type(data[0]))
+
+                for key, value in data[0].items():
+                    print(
+                        key,
+                        "->",
+                        type(value),
+                        "->",
+                        value
+                    )
+
+        return data

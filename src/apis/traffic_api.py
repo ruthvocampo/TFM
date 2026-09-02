@@ -1,32 +1,45 @@
 import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime
 
 
 class TrafficApi:
 
     def __init__(self):
-        self.url = "https://datos.madrid.es/api/3/action/datastore_search"
+        self.API_URL = "https://informo.madrid.es/informo/tmadrid/pm.xml"
 
     def get_info(self):
-        params = {
-            "resource_id": "202087-0-trafico-intensidad",
-            "limit": 100
-        }
 
-        try:
-            req = requests.get(
-                self.url,
-                params=params,
-                timeout=10
-            )
+        response = requests.get(
+            self.API_URL,
+            timeout=(10, 120)
+        )
 
-            req.raise_for_status()
+        response.raise_for_status()
 
-            data = req.json()
+        root = ET.fromstring(response.content)
 
-            return data["result"]["records"]
+        fecha_hora = root.findtext("fecha_hora")
 
-        except requests.RequestException as e:
-            raise Exception(f"ERROR al conectar con la API: {e}")
+        records = []
 
-        except ValueError:
-            raise Exception("ERROR: La respuesta no tiene formato JSON")
+        for pm in root.findall("pm"):
+            record = {
+                "fecha_hora": fecha_hora,
+                "idelem": pm.findtext("idelem"),
+                "descripcion": pm.findtext("descripcion"),
+                "accesoAsociado": pm.findtext("accesoAsociado"),
+                "intensidad": pm.findtext("intensidad"),
+                "ocupacion": pm.findtext("ocupacion"),
+                "carga": pm.findtext("carga"),
+                "nivelServicio": pm.findtext("nivelServicio"),
+                "intensidadSat": pm.findtext("intensidadSat"),
+                "error": pm.findtext("error"),
+                "subarea": pm.findtext("subarea"),
+                "st_x": pm.findtext("st_x"),
+                "st_y": pm.findtext("st_y"),
+            }
+
+            records.append(record)
+
+        return records

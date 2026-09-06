@@ -85,7 +85,26 @@ class WeatherEventGenerator:
 
         return latest_hour
 
+    def create_timestamp(self, record, hour):
 
+        try:
+
+            year = int(record.get("ANO"))
+            month = int(record.get("MES"))
+            day = int(record.get("DIA"))
+
+            return datetime(
+                year,
+                month,
+                day,
+                hour,
+                0,
+                0
+            )
+
+        except (TypeError, ValueError):
+
+            return None
 
     # GENERAR EVENTOS
     def generate_events(self):

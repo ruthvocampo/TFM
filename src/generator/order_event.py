@@ -1,197 +1,308 @@
 from datetime import datetime
 import random
 
-from src.config.setup import LANDING_ROOT
 
-
-STATUS_TRANSITIONS = {
-    "PENDIENTE DE ASIGNACIÓN": [
-        "ASIGNADO",
-        "CANCELADO"
-    ],
-
-    "ASIGNADO": [
-        "RECOGIDO",
-        "CANCELADO"
-    ],
-
-    "RECOGIDO": [
-        "EN REPARTO"
-    ],
-
-    "EN REPARTO": [
-        "ENTREGADO",
-        "RECHAZADO",
-        "INCIDENTADO"
-    ],
-
-    "ENTREGADO": [],
-    "RECHAZADO": [],
-    "CANCELADO": [],
-    "INCIDENTADO": []
+FINAL_STATUSES = {
+    "ENTREGADO",
+    "RECHAZADO",
+    "CANCELADO",
+    "INCIDENTADO",
+    "RECOGIDO",
 }
 
 
 class OrderEvents:
 
-    def __init__(self, orders, routes):
+    def __init__(self, orders, drivers, routes, fecha_actual):
         self.orders = orders
+        self.drivers = drivers
         self.routes = routes
+        self.fecha_actual = fecha_actual
+
+        # Contador para evitar IDs de evento duplicados
+        self.event_counter = 0
+
+    # ==========================================================
+    # ID EVENTO
+    # ==========================================================
 
     def id_order_event(self):
-        return random.randint(1, 300)
+        self.event_counter += 1
+        return self.event_counter
 
-    def find_driver_for_order(self, order): 
-        if order["type_order"] == "ENTREGA": 
-            postal_code = order["delivery_postal_code"] 
-            street = order["delivery_street"] 
-        elif order["type_order"] == "RECOGIDA":
-            postal_code = order["pickup_postal_code"] 
-            street = order["pickup_street"] 
-        else: 
-            return None 
-        print( f"BUSCANDO RUTA: {postal_code} {street}" ) 
-        
-        matching_route = self.routes[ (self.routes["postal_code"].astype(str) == str(postal_code)) & (self.routes["street"].str.strip().str.upper() == str(street).strip().upper()) ] 
-        if matching_route.empty: 
-            print("NO EXISTE RUTA") 
-            return None 
-        
-        driver = matching_route.iloc[0]["id_driver"] 
-        print( f"RUTA ENCONTRADA → {driver}" ) 
-        return driver
+    # ==========================================================
+    # BUSCAR REPARTIDOR
+    # ==========================================================
 
-    def choose_next_status(self, current_status):
+    def find_driver_for_order(self, order):
+        """
+        Busca en routes el repartidor que tiene asignada
+        la calle del pedido.
 
-        possible_statuses = STATUS_TRANSITIONS.get(
-            current_status,
-            []
+        ENTREGA:
+            utiliza la dirección de entrega.
+
+        RECOGIDA:
+            utiliza la dirección de recogida.
+        """
+
+        if order.type_service == "ENTREGA":
+
+            postal_code = str(
+                order.delivery_postal_code
+            ).strip()
+
+            street = str(
+                order.delivery_street
+            ).strip().upper()
+
+        elif order.type_service == "RECOGIDA":
+
+            postal_code = str(
+                order.pickup_postal_code
+            ).strip()
+
+            street = str(
+                order.pickup_street
+            ).strip().upper()
+
+        else:
+            print(
+                f"{order.id_order}: "
+                f"tipo de servicio desconocido."
+            )
+            return None
+
+        matching_routes = [ route for route in self.routes 
+                           if (str(route.postal_code).strip()== postal_code and str(route.street).strip().upper()== street)]
+
+        if not matching_routes:
+
+            print(
+                f"{order.id_order}: "
+                f"no existe ruta para "
+                f"{postal_code} - {street}"
+            )
+
+            return None
+
+        # La ruta ya determina qué repartidor cubre esa calle
+        driver_id = matching_routes[0].id_driver
+
+        # Comprobamos que el conductor siga existiendo
+        # y esté operativo.
+        matching_driver = [driver for driver in self.drivers if driver.id_driver == driver_id]
+
+        if not matching_driver:
+
+            print(
+                f"{order.id_order}: "
+                f"el repartidor {driver_id} "
+                f"no existe."
+            )
+
+            return None
+
+        driver = matching_driver[0]
+
+        if not bool(driver.available):
+
+            print(
+                f"{order.id_order}: "
+                f"el repartidor {driver_id} "
+                f"no está disponible."
+            )
+
+            return None
+
+        print(
+            f"{order.id_order}: "
+            f"ruta encontrada → {driver_id}"
         )
 
-        if not possible_statuses:
-            return None
+        return driver_id
+
+    # ==========================================================
+    # SIGUIENTE ESTADO
+    # ==========================================================
+
+    def choose_next_status(self, order):
+        """
+        Decide el siguiente estado dependiendo del pedido
+        y de su tipo de servicio.
+        """
+
+        current_status = order.status
+
+        # ------------------------------------------------------
+        # PENDIENTE DE ASIGNACIÓN
+        # ------------------------------------------------------
 
         if current_status == "PENDIENTE DE ASIGNACIÓN":
 
             return random.choices(
-                possible_statuses,
-                weights=[0.90, 0.10],
+                [
+                    "ASIGNADO",
+                    "CANCELADO"
+                ],
+                weights=[
+                    0.95,
+                    0.05
+                ],
                 k=1
             )[0]
+
+        # ------------------------------------------------------
+        # ASIGNADO
+        # ------------------------------------------------------
 
         if current_status == "ASIGNADO":
 
+            # Tanto las recogidas como las entregas
+            # pasan primero por EN REPARTO.
             return random.choices(
-                possible_statuses,
-                weights=[0.95, 0.05],
+                [
+                    "EN REPARTO",
+                    "CANCELADO"
+                ],
+                weights=[
+                    0.95,
+                    0.05
+                ],
                 k=1
             )[0]
+
+        # ------------------------------------------------------
+        # EN REPARTO
+        # ------------------------------------------------------
 
         if current_status == "EN REPARTO":
 
+            # Para una RECOGIDA, el servicio termina
+            # cuando se recoge el paquete.
+            if order.type_service == "RECOGIDA":
+
+                return "RECOGIDO"
+
+            # Para una ENTREGA, puede:
+            # - entregarse
+            # - rechazarse
+            # - sufrir una incidencia
+
             return random.choices(
-                possible_statuses,
-                weights=[0.85, 0.10, 0.05],
+                [
+                    "ENTREGADO",
+                    "RECHAZADO",
+                    "INCIDENTADO"
+                ],
+                weights=[
+                    0.85,
+                    0.10,
+                    0.05
+                ],
                 k=1
             )[0]
 
-        return random.choice(possible_statuses)
+        return None
+
+    # ==========================================================
+    # GENERAR EVENTO
+    # ==========================================================
 
     def generate_event(self):
+        """
+        Selecciona un pedido activo, calcula su siguiente estado,
+        asigna repartidor cuando corresponde y actualiza el Order.
+        """
 
-        # -----------------------------------------
-        # 1. Buscar pedidos que todavía pueden avanzar
-        # -----------------------------------------
+        # ------------------------------------------------------
+        # 1. Buscar pedidos activos
+        # ------------------------------------------------------
 
-        active_orders = self.orders[
-            ~self.orders["status"].isin([
-                "ENTREGADO",
-                "RECHAZADO",
-                "CANCELADO",
-                "INCIDENTADO"
-            ])
+        active_orders = [
+            order
+            for order in self.orders
+            if order.status not in FINAL_STATUSES
         ]
 
-        if active_orders.empty:
+        if not active_orders:
             return None
 
-        # -----------------------------------------
-        # 2. Seleccionar un pedido activo
-        # -----------------------------------------
+        # ------------------------------------------------------
+        # 2. Seleccionar pedido
+        # ------------------------------------------------------
 
-        order = active_orders.sample(n=1).iloc[0]
+        order = random.choice(active_orders)
 
-        # -----------------------------------------
-        # 3. Estado actual
-        # -----------------------------------------
+        current_status = order.status
 
-        current_status = order["status"]
+        # ------------------------------------------------------
+        # 3. Obtener siguiente estado
+        # ------------------------------------------------------
 
-        # -----------------------------------------
-        # 4. Obtener siguiente estado
-        # -----------------------------------------
-
-        next_status = self.choose_next_status(
-            current_status
-        )
+        next_status = self.choose_next_status(order)
 
         if next_status is None:
             return None
 
-        # -----------------------------------------
-        # 5. Repartidor actual
-        # -----------------------------------------
+        # ------------------------------------------------------
+        # 4. Repartidor actual
+        # ------------------------------------------------------
 
-        id_driver = order["id_driver"]
+        id_driver = order.id_driver
 
-        # -----------------------------------------
-        # 6. Si pasa a ASIGNADO
+        # ------------------------------------------------------
+        # 5. Si pasa a ASIGNADO
         # buscar repartidor mediante Route
-        # -----------------------------------------
+        # ------------------------------------------------------
 
         if next_status == "ASIGNADO":
 
             id_driver = self.find_driver_for_order(order)
 
+            # No se puede asignar si no hay repartidor válido.
             if id_driver is None:
                 return None
 
-        # -----------------------------------------
-        # 7. Crear evento
-        # -----------------------------------------
+        # ------------------------------------------------------
+        # 6. Crear evento
+        # ------------------------------------------------------
 
         event_id = self.id_order_event()
 
-        value = {
+        timestamp = self.fecha_actual
+
+        event = {
             "order_event_id": event_id,
-            "id_order": order["id_order"],
+            "id_order": order.id_order,
             "id_driver": id_driver,
-            "timestamp": datetime.now(),
+            "timestamp": timestamp,
             "status": next_status
         }
 
-        # -----------------------------------------
-        # 8. Actualizar pedido
-        # -----------------------------------------
+        # ------------------------------------------------------
+        # 7. Actualizar Order
+        # ------------------------------------------------------
 
-        mask = (
-            self.orders["id_order"]
-            == order["id_order"]
+        order.id_driver = id_driver
+
+        order.set_status(
+            next_status,
+            timestamp
         )
 
-        self.orders.loc[
-            mask,
-            "status"
-        ] = next_status
-
-        self.orders.loc[
-            mask,
-            "id_driver"
-        ] = id_driver
+        # ------------------------------------------------------
+        # 8. Mostrar información
+        # ------------------------------------------------------
 
         print(
-            f"{order['id_order']}: "
+            f"{order.id_order}: "
             f"{current_status} → {next_status}"
         )
 
-        return event_id, value
+        if id_driver is not None:
+            print(
+                f"   Repartidor: {id_driver}"
+            )
+
+        return event_id, event

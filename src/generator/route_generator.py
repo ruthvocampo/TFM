@@ -1,64 +1,163 @@
-import random
 import pandas as pd
-from pathlib import Path
+from sklearn.cluster import KMeans
+
 from src.objects.route import Route
 
-from src.config.setup import LANDING_ROOT
 
 class RouteGenerator:
 
-    def __init__(self, drivers, addresses):
+    DRIVERS_PER_ZONE = 5
+
+    def __init__(self, drivers, addresses, fecha_actual):
         self.drivers = drivers
         self.addresses = addresses
+        self.fecha_actual = fecha_actual
         self.routes = []
+
+    def _get_drivers_by_zone(self, postal_code):
+        """
+        Obtiene los conductores asignados a un código postal.
+        """
+
+        postal_code = str(postal_code).strip()
+
+        return [driver for driver in self.drivers if str(driver.zone).strip() == postal_code]
         
-        
+    def _get_streets_by_zone(self, postal_code):
+        """
+        Obtiene las calles de un código postal junto con
+        sus coordenadas geográficas.
+        """
+
+        postal_code = str(postal_code).strip()
+
+        streets = self.addresses[
+            self.addresses["PostalCode"].astype(str).str.strip()
+            == postal_code
+        ][
+            ["Street", "Latitude", "Longitude"]
+        ].dropna(
+            subset=["Street", "Latitude", "Longitude"]
+        )
+
+        return (
+            streets
+            .drop_duplicates(subset=["Street"])
+            .reset_index(drop=True)
+        )
+
+    def _assign_streets_by_proximity(
+        self,
+        streets,
+        drivers_zone
+    ):
+        """
+        Agrupa geográficamente las calles y asigna cada grupo
+        a un conductor.
+        """
+
+        n_drivers = len(drivers_zone)
+
+        if n_drivers == 0 or streets.empty:
+            return []
+
+        n_clusters = min(
+            n_drivers,
+            len(streets)
+        )
+
+        coordinates = streets[
+            ["Latitude", "Longitude"]
+        ].astype(float)
+
+        kmeans = KMeans(
+            n_clusters=n_clusters,
+            random_state=42,
+            n_init=10
+        )
+
+        streets = streets.copy()
+
+        streets["cluster"] = kmeans.fit_predict(
+            coordinates
+        )
+
+        drivers = sorted(drivers_zone,key=lambda driver: driver.id_driver)
+
+        cluster_ids = sorted(
+            streets["cluster"].unique()
+        )
+
+        cluster_to_driver = {
+            cluster_id: drivers[index].id_driver
+            for index, cluster_id in enumerate(cluster_ids)
+        }
+
+        streets["id_driver"] = streets["cluster"].map(
+            cluster_to_driver
+        )
+
+        return streets
+
     def create_routes(self):
-        # Códigos postales disponibles
+
+        self.routes = []
+
+        route_id = 1
+
         postal_codes = (
             self.addresses["PostalCode"]
             .dropna()
-            .unique()
+            .astype(str)
+            .str.strip()
+            .drop_duplicates()
             .tolist()
         )
 
-        # Mezclamos los códigos postales
-        random.shuffle(postal_codes)
+        for postal_code in postal_codes:
 
-        # Repartimos los códigos postales entre los drivers
-        for i, postal_code in enumerate(postal_codes):
-
-            driver = self.drivers.iloc[
-                i % len(self.drivers)
-            ]
-
-            driver_id = driver["id_driver"]
-
-            streets = (
-                self.addresses[
-                    self.addresses["PostalCode"] == postal_code
-                ]["Street"]
-                .dropna()
-                .unique()
-                .tolist()
+            drivers_zone = self._get_drivers_by_zone(
+                postal_code
             )
 
-            for street in streets:
+            if not drivers_zone:
+                print(
+                    f"CP {postal_code}: "
+                    f"sin conductores asignados"
+                )
+                continue
 
-                self.routes.append(Route(
-                    id_route= i + 1,
-                    id_driver= driver_id,
-                    postal_code= postal_code,
-                    street= street
-                ))
-        
-        
-        # Convertimos los objetos Order a DataFrame
-        routes_df = pd.DataFrame([vars(route) for route in self.routes])
-        
-        routes_path = Path(LANDING_ROOT) / "routes"
-        routes_path.mkdir(parents=True, exist_ok=True)
+            streets = self._get_streets_by_zone(
+                postal_code
+            )
 
-        routes_df.to_json(routes_path / "routes.json",orient="records",lines=True,force_ascii=False)
+            if streets.empty:
+                print(
+                    f"CP {postal_code}: "
+                    f"sin calles disponibles"
+                )
+                continue
 
-        return routes_df
+            assigned_streets = (
+                self._assign_streets_by_proximity(
+                    streets,
+                    drivers_zone
+                )
+            )
+
+            for _, street in assigned_streets.iterrows():
+
+                route = Route(
+                    id_route=route_id,
+                    id_driver=street["id_driver"],
+                    postal_code=postal_code,
+                    street=street["Street"]
+                )
+
+                self.routes.append(route)
+
+                route_id += 1
+
+        print(f"Generados {len(self.routes)} rutas.")
+        
+        return self.routes

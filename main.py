@@ -1,11 +1,22 @@
 from src.simulator.simulator import Simulator
-from src.generator.weather_event import WeatherEventGenerator
-from src.apis.weather_api import WeatherApi
-from src.apis.traffic_api import TrafficApi
 
-simulator = Simulator()
+from datetime import datetime
 
-""" simulator.generate_initial_data()
+
+now = datetime(2026, 9, 6, 9, 30)
+
+
+simulator = Simulator(fecha_actual=now)
+
+historical, orders, drivers, routes = simulator.generate_initial_data()
+print("historical:", type(historical), len(historical) if historical is not None else None)
+print("orders:", type(orders), len(orders) if orders is not None else None)
+print("drivers:", type(drivers), len(drivers) if drivers is not None else None)
+print("routes:", type(routes), len(routes) if routes is not None else None)
+
+print(len(historical), len(orders), len(drivers), len(routes))
+
+simulator.generate_files(historical, orders, drivers, routes)
 
 events = simulator.create_order_events(10)
 
@@ -14,16 +25,12 @@ print("################ 2")
 events = simulator.create_order_events(10)
 print(events)
 
+
+
+
 gps = simulator.create_gps_events(20)
-print(gps) """
+print(gps)
 
+generator_simulation_events = simulator.generate_simulation_events(num_order_events=10, num_gps_events=20)
 
-"""weather = WeatherEventGenerator()
-
-data = weather.generate_events()
-#print(data)
-#/dynamicAPI"""
-
-traffic_api = TrafficApi()
-xml_data = traffic_api.get_info()
-print(xml_data[:1000])
+generator_real_events = simulator.generate_real_data_files()

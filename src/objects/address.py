@@ -18,13 +18,12 @@ class Address:
         full_address = f"{self.Street} {self.HouseNumber}"
         if self.building_type == "EDIFICIO_RESIDENCIAL" and self.floor is not None:
             full_address += f", Piso {self.floor}"
-        if self.biulding_type == "EDIFICIO_RESIDENCIAL" and self.door is not None:
+        if self.building_type == "EDIFICIO_RESIDENCIAL" and self.door is not None:
             full_address += f", Puerta {self.door}"
         full_address += f", {self.Locality}, {self.Region}, {self.Province}, {self.PostalCode}, {self.Country}"
         return full_address
     
-    def get_id_address(self):
-        return self.id_address
+
     def get_coordinates(self):
         return (self.Latitude, self.Longitude)
     def get_building_type(self):

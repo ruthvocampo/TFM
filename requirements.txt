@@ -2,3 +2,7 @@ pandas
 numpy
 requests
 pyspark
+scikit-learn
+openpyxl
+pyarrow
+fastparquet

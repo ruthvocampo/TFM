@@ -1,0 +1,14 @@
+{
+    "datasource": "drivers",
+    "dataset": "drivers",
+    "source": {
+        "format": "parquet",
+        "options": {},
+        "path": "${LANDING_PATH}/drivers/drivers.parquet"
+    },
+    "sink": {
+        "layer": "bronze",
+        "format": "parquet",
+        "path": "${BRONZE_PATH}/drivers"
+    }
+}

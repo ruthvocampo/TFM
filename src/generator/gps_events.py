@@ -1,5 +1,4 @@
 import random
-from datetime import datetime, timezone
 
 
 class GPSEvents:
@@ -7,44 +6,73 @@ class GPSEvents:
     def __init__(self, drivers, fecha_actual):
         self.drivers = drivers
         self.fecha_actual = fecha_actual
+        self.event_counter = 0
 
     def id_event_gps(self):
-        return random.randint(1, 300)
 
-    def id_driver(self):
-        drivers_list = [driver for driver in self.drivers if driver.available == True]
+        self.event_counter += 1
 
-        if not drivers_list:
-            raise ValueError("No hay conductores disponibles")
+        return self.event_counter
 
-        return drivers_list[0].id_driver
+    def available_drivers(self):
+
+        return [
+            driver
+            for driver in self.drivers
+            if driver.available
+        ]
 
     def timestamp(self):
+
         return self.fecha_actual.isoformat()
 
     def longitud(self):
+
         return random.uniform(-4.579, -3.053)
 
     def latitude(self):
+
         return random.uniform(39.884, 41.164)
 
-    def send_gps(self):
+    def send_gps(self, driver):
 
         gps_event_id = self.id_event_gps()
-        id_driver = self.id_driver()
+
         timestamp = self.timestamp()
+
         latitude = self.latitude()
+
         longitud = self.longitud()
 
         value = {
             "gps_event_id": gps_event_id,
-            "id_driver": id_driver,
+            "id_driver": driver.id_driver,
             "timestamp": timestamp,
             "latitude": latitude,
             "longitud": longitud
         }
 
         key = gps_event_id
-        print ("# REPARTIDOR : ", id_driver)
-        print (value)
+
+        print(
+            "# REPARTIDOR:",
+            driver.id_driver
+        )
+
+        print(value)
+
         return key, value
+
+    def generate_available_events(self):
+
+        events = []
+
+        available_drivers = self.available_drivers()
+
+        for driver in available_drivers:
+
+            key, value = self.send_gps(driver)
+
+            events.append(value)
+
+        return events

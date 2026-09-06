@@ -18,7 +18,7 @@ class OrderGenerator:
         self.orders = [order
             for order in self.historical_orders
             if (
-                order.status == "PENDIENTE DE ASIGNACIÓN"
+                order.status in ["PENDIENTE DE ASIGNACIÓN ENTREGA", "PENDIENTE DE ASIGNACIÓN RECOGIDA"]
                 and order.status_modified_date.date() == today
             )
         ]

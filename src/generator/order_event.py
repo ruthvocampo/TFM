@@ -1,80 +1,394 @@
 from datetime import datetime
 import random
 
+from src.generator.incident_generator import IncidentGenerator
 
-FINAL_STATUSES = {
+
+FINAL_STATUSES = [
+    "RECOGIDO",
     "ENTREGADO",
     "RECHAZADO",
-    "CANCELADO",
-    "INCIDENTADO",
-    "RECOGIDO",
-}
+    "CANCELADO"
+]
 
 
 class OrderEvents:
 
-    def __init__(self, orders, drivers, routes, fecha_actual):
+    def __init__(
+        self,
+        orders,
+        drivers,
+        routes,
+        fecha_actual
+    ):
         self.orders = orders
         self.drivers = drivers
         self.routes = routes
         self.fecha_actual = fecha_actual
 
-        # Contador para evitar IDs de evento duplicados
         self.event_counter = 0
 
-    # ==========================================================
-    # ID EVENTO
-    # ==========================================================
+        self.incident_generator = IncidentGenerator()
+        self.incidents = []
 
-    def id_order_event(self):
+    # =========================================================
+    # GENERAR TODOS LOS EVENTOS POSIBLES EN ESTE MOMENTO
+    # =========================================================
+
+    def generate_available_events(self):
+
+        events = []
+
+        # =====================================================
+        # Recorremos las órdenes existentes
+        # =====================================================
+
+        for order in self.orders:
+
+            # Una orden finalizada no puede avanzar más
+            if order.status in FINAL_STATUSES:
+                continue
+
+            next_status = self.choose_available_next_status(order)
+
+            if next_status is None:
+                continue
+
+            event = self.generate_event_for_order(
+                order,
+                next_status
+            )
+
+            if event is not None:
+                events.append(event)
+
+        return events
+
+    # =========================================================
+    # GENERAR UN EVENTO PARA UNA ORDEN CONCRETA
+    # =========================================================
+
+    def generate_event_for_order(self, order, next_status):
+
+        previous_status = order.status
+
+        timestamp = self._get_event_timestamp(
+            order,
+            next_status
+        )
+
+        # =====================================================
+        # ASIGNACIÓN DE REPARTIDOR
+        # =====================================================
+
+        if next_status in [
+            "ASIGNADO RECOGIDA",
+            "ASIGNADO ENTREGA"
+        ]:
+
+            driver_id = self.find_driver_for_order(order)
+
+            if driver_id is None:
+
+                print(
+                    f"{order.id_order}: "
+                    f"no se ha encontrado un repartidor "
+                    f"disponible"
+                )
+
+                return None
+
+            # Guardamos el repartidor correspondiente
+            if next_status == "ASIGNADO RECOGIDA":
+                order.id_driver_pickup = driver_id
+
+            elif next_status == "ASIGNADO ENTREGA":
+                order.id_driver_delivery = driver_id
+
+            order.id_driver = driver_id
+
+        # =====================================================
+        # INCIDENTE
+        # =====================================================
+
+        if next_status == "INCIDENTADO":
+
+            previous_driver_id = order.id_driver
+
+            incident = self.incident_generator.create_incident(
+                order=order,
+                incident_date=timestamp
+            )
+
+            incident.id_driver = previous_driver_id
+
+            self.incidents.append(incident)
+
+        # =====================================================
+        # CAMBIO DE ESTADO
+        # =====================================================
+
+        order.set_status(
+            next_status,
+            timestamp
+        )
+
+        # =====================================================
+        # RESOLUCIÓN DE INCIDENCIA
+        # =====================================================
+
+        if (
+            previous_status == "INCIDENTADO"
+            and
+            next_status == "ASIGNADO ENTREGA"
+        ):
+
+            order_incidents = [
+                incident
+                for incident in self.incidents
+                if incident.id_order == order.id_order
+            ]
+
+            if order_incidents:
+
+                incident = order_incidents[-1]
+
+                previous_driver_id = incident.id_driver
+
+                # Volvemos al mismo repartidor
+                order.id_driver = previous_driver_id
+
+                order.id_driver_delivery = (
+                    previous_driver_id
+                )
+
+                incident.resolve(
+                    resolution_date=timestamp,
+                    resolution_action="REASIGNACIÓN AL MISMO REPARTIDOR"
+                )
+
+        # =====================================================
+        # CREAR EVENTO
+        # =====================================================
+
         self.event_counter += 1
-        return self.event_counter
 
-    # ==========================================================
+        event = {
+            "id_event": self.event_counter,
+            "id_order": order.id_order,
+            "id_driver": order.id_driver,
+            "type_service": order.type_service,
+            "previous_status": previous_status,
+            "status": next_status,
+            "timestamp": timestamp
+        }
+
+        return event
+
+    # =========================================================
+    # DETERMINAR SI UNA ORDEN PUEDE AVANZAR
+    # =========================================================
+
+    def choose_available_next_status(self, order):
+
+        current_status = order.status
+        type_service = order.type_service
+
+        hora = self.fecha_actual.hour
+
+        # =====================================================
+        # RECOGIDA
+        # =====================================================
+
+        if type_service == "RECOGIDA":
+
+            if current_status == "CREADO":
+
+                return "PENDIENTE DE ASIGNACIÓN RECOGIDA"
+
+            if current_status == "PENDIENTE DE ASIGNACIÓN RECOGIDA":
+
+                # Solo asignamos durante la ventana 06:00-07:59
+                if 6 <= hora < 8:
+
+                    return "ASIGNADO RECOGIDA"
+
+                return None
+
+            if current_status == "ASIGNADO RECOGIDA":
+
+                if 6 <= hora < 8:
+
+                    return "EN REPARTO RECOGIDA"
+
+                return None
+
+            if current_status == "EN REPARTO RECOGIDA":
+
+                # RECOGIDO nunca antes de las 08:00
+                if 8 <= hora <= 22:
+
+                    return "RECOGIDO"
+
+                return None
+
+            return None
+
+        # =====================================================
+        # ENTREGA
+        # =====================================================
+
+        if type_service == "ENTREGA":
+
+            # -------------------------------------------------
+            # FASE DE RECOGIDA
+            # -------------------------------------------------
+
+            if current_status == "CREADO":
+
+                return "PENDIENTE DE ASIGNACIÓN RECOGIDA"
+
+            if current_status == "PENDIENTE DE ASIGNACIÓN RECOGIDA":
+
+                if 6 <= hora < 8:
+
+                    return "ASIGNADO RECOGIDA"
+
+                return None
+
+            if current_status == "ASIGNADO RECOGIDA":
+
+                if 6 <= hora < 8:
+
+                    return "EN REPARTO RECOGIDA"
+
+                return None
+
+            if current_status == "EN REPARTO RECOGIDA":
+
+                if 8 <= hora <= 22:
+
+                    return "RECOGIDO"
+
+                return None
+
+            if current_status == "RECOGIDO":
+
+                return "ENVIADO"
+
+            if current_status == "ENVIADO":
+
+                return "EN TRANSPORTE"
+
+            # -------------------------------------------------
+            # LLEGADA A LA NAVE
+            # -------------------------------------------------
+
+            if current_status == "EN TRANSPORTE":
+
+                # La llegada a nave solo puede producirse
+                # durante la madrugada
+                if 0 <= hora < 6:
+
+                    return "LLEGADA A LA NAVE"
+
+                return None
+
+            if current_status == "LLEGADA A LA NAVE":
+
+                return "PENDIENTE DE ASIGNACIÓN ENTREGA"
+
+            # -------------------------------------------------
+            # FASE DE ENTREGA
+            # -------------------------------------------------
+
+            if current_status == "PENDIENTE DE ASIGNACIÓN ENTREGA":
+
+                if 6 <= hora < 8:
+
+                    return random.choice([
+                        "ASIGNADO ENTREGA",
+                        "CANCELADO"
+                    ])
+
+                return None
+
+            if current_status == "ASIGNADO ENTREGA":
+
+                if 6 <= hora < 8:
+
+                    return "EN REPARTO ENTREGA"
+
+                return None
+
+            if current_status == "EN REPARTO ENTREGA":
+
+                # Los resultados de reparto solo se producen
+                # durante la jornada.
+                if 8 <= hora <= 22:
+
+                    return random.choice([
+                        "ENTREGADO",
+                        "RECHAZADO",
+                        "INCIDENTADO"
+                    ])
+
+                return None
+
+            # -------------------------------------------------
+            # INCIDENTE
+            # -------------------------------------------------
+
+            if current_status == "INCIDENTADO":
+
+                # La resolución vuelve a asignación
+                if 6 <= hora <= 22:
+
+                    return "ASIGNADO ENTREGA"
+
+                return None
+
+            return None
+
+        return None
+
+    # =========================================================
     # BUSCAR REPARTIDOR
-    # ==========================================================
+    # =========================================================
 
     def find_driver_for_order(self, order):
-        """
-        Busca en routes el repartidor que tiene asignada
-        la calle del pedido.
-
-        ENTREGA:
-            utiliza la dirección de entrega.
-
-        RECOGIDA:
-            utiliza la dirección de recogida.
-        """
 
         if order.type_service == "ENTREGA":
 
-            postal_code = str(
-                order.delivery_postal_code
-            ).strip()
-
-            street = str(
-                order.delivery_street
-            ).strip().upper()
-
-        elif order.type_service == "RECOGIDA":
-
-            postal_code = str(
-                order.pickup_postal_code
-            ).strip()
-
-            street = str(
-                order.pickup_street
-            ).strip().upper()
+            # En una entrega usamos el destino cuando
+            # buscamos al repartidor que realizará la entrega.
+            postal_code = order.delivery_postal_code
+            street = order.delivery_street
 
         else:
-            print(
-                f"{order.id_order}: "
-                f"tipo de servicio desconocido."
-            )
-            return None
 
-        matching_routes = [ route for route in self.routes 
-                           if (str(route.postal_code).strip()== postal_code and str(route.street).strip().upper()== street)]
+            postal_code = order.pickup_postal_code
+            street = order.pickup_street
+
+        postal_code = str(
+            postal_code
+        ).strip()
+
+        street = str(
+            street
+        ).strip().upper()
+
+        matching_routes = [
+            route
+            for route in self.routes
+            if (
+                str(route.postal_code).strip()
+                == postal_code
+                and
+                str(route.street).strip().upper()
+                == street
+            )
+        ]
 
         if not matching_routes:
 
@@ -86,223 +400,58 @@ class OrderEvents:
 
             return None
 
-        # La ruta ya determina qué repartidor cubre esa calle
-        driver_id = matching_routes[0].id_driver
+        route = matching_routes[0]
 
-        # Comprobamos que el conductor siga existiendo
-        # y esté operativo.
-        matching_driver = [driver for driver in self.drivers if driver.id_driver == driver_id]
+        driver_id = route.id_driver
 
-        if not matching_driver:
-
-            print(
-                f"{order.id_order}: "
-                f"el repartidor {driver_id} "
-                f"no existe."
+        matching_drivers = [
+            driver
+            for driver in self.drivers
+            if (
+                str(driver.id_driver).strip()
+                == str(driver_id).strip()
             )
-
-            return None
-
-        driver = matching_driver[0]
-
-        if not bool(driver.available):
-
-            print(
-                f"{order.id_order}: "
-                f"el repartidor {driver_id} "
-                f"no está disponible."
-            )
-
-            return None
-
-        print(
-            f"{order.id_order}: "
-            f"ruta encontrada → {driver_id}"
-        )
-
-        return driver_id
-
-    # ==========================================================
-    # SIGUIENTE ESTADO
-    # ==========================================================
-
-    def choose_next_status(self, order):
-        """
-        Decide el siguiente estado dependiendo del pedido
-        y de su tipo de servicio.
-        """
-
-        current_status = order.status
-
-        # ------------------------------------------------------
-        # PENDIENTE DE ASIGNACIÓN
-        # ------------------------------------------------------
-
-        if current_status == "PENDIENTE DE ASIGNACIÓN":
-
-            return random.choices(
-                [
-                    "ASIGNADO",
-                    "CANCELADO"
-                ],
-                weights=[
-                    0.95,
-                    0.05
-                ],
-                k=1
-            )[0]
-
-        # ------------------------------------------------------
-        # ASIGNADO
-        # ------------------------------------------------------
-
-        if current_status == "ASIGNADO":
-
-            # Tanto las recogidas como las entregas
-            # pasan primero por EN REPARTO.
-            return random.choices(
-                [
-                    "EN REPARTO",
-                    "CANCELADO"
-                ],
-                weights=[
-                    0.95,
-                    0.05
-                ],
-                k=1
-            )[0]
-
-        # ------------------------------------------------------
-        # EN REPARTO
-        # ------------------------------------------------------
-
-        if current_status == "EN REPARTO":
-
-            # Para una RECOGIDA, el servicio termina
-            # cuando se recoge el paquete.
-            if order.type_service == "RECOGIDA":
-
-                return "RECOGIDO"
-
-            # Para una ENTREGA, puede:
-            # - entregarse
-            # - rechazarse
-            # - sufrir una incidencia
-
-            return random.choices(
-                [
-                    "ENTREGADO",
-                    "RECHAZADO",
-                    "INCIDENTADO"
-                ],
-                weights=[
-                    0.85,
-                    0.10,
-                    0.05
-                ],
-                k=1
-            )[0]
-
-        return None
-
-    # ==========================================================
-    # GENERAR EVENTO
-    # ==========================================================
-
-    def generate_event(self):
-        """
-        Selecciona un pedido activo, calcula su siguiente estado,
-        asigna repartidor cuando corresponde y actualiza el Order.
-        """
-
-        # ------------------------------------------------------
-        # 1. Buscar pedidos activos
-        # ------------------------------------------------------
-
-        active_orders = [
-            order
-            for order in self.orders
-            if order.status not in FINAL_STATUSES
         ]
 
-        if not active_orders:
-            return None
+        if not matching_drivers:
 
-        # ------------------------------------------------------
-        # 2. Seleccionar pedido
-        # ------------------------------------------------------
-
-        order = random.choice(active_orders)
-
-        current_status = order.status
-
-        # ------------------------------------------------------
-        # 3. Obtener siguiente estado
-        # ------------------------------------------------------
-
-        next_status = self.choose_next_status(order)
-
-        if next_status is None:
-            return None
-
-        # ------------------------------------------------------
-        # 4. Repartidor actual
-        # ------------------------------------------------------
-
-        id_driver = order.id_driver
-
-        # ------------------------------------------------------
-        # 5. Si pasa a ASIGNADO
-        # buscar repartidor mediante Route
-        # ------------------------------------------------------
-
-        if next_status == "ASIGNADO":
-
-            id_driver = self.find_driver_for_order(order)
-
-            # No se puede asignar si no hay repartidor válido.
-            if id_driver is None:
-                return None
-
-        # ------------------------------------------------------
-        # 6. Crear evento
-        # ------------------------------------------------------
-
-        event_id = self.id_order_event()
-
-        timestamp = self.fecha_actual
-
-        event = {
-            "order_event_id": event_id,
-            "id_order": order.id_order,
-            "id_driver": id_driver,
-            "timestamp": timestamp,
-            "status": next_status
-        }
-
-        # ------------------------------------------------------
-        # 7. Actualizar Order
-        # ------------------------------------------------------
-
-        order.id_driver = id_driver
-
-        order.set_status(
-            next_status,
-            timestamp
-        )
-
-        # ------------------------------------------------------
-        # 8. Mostrar información
-        # ------------------------------------------------------
-
-        print(
-            f"{order.id_order}: "
-            f"{current_status} → {next_status}"
-        )
-
-        if id_driver is not None:
             print(
-                f"   Repartidor: {id_driver}"
+                f"{order.id_order}: "
+                f"no existe el conductor {driver_id}"
             )
 
-        return event_id, event
+            return None
+
+        driver = matching_drivers[0]
+
+        if not driver.available:
+
+            print(
+                f"{order.id_order}: "
+                f"el conductor {driver_id} "
+                f"no está disponible"
+            )
+
+            return None
+
+        return driver.id_driver
+
+    # =========================================================
+    # TIMESTAMP
+    # =========================================================
+
+    def _get_event_timestamp(
+        self,
+        order,
+        next_status
+    ):
+
+        return self.fecha_actual
+
+    # =========================================================
+    # INCIDENCIAS
+    # =========================================================
+
+    def get_incidents(self):
+
+        return self.incidents

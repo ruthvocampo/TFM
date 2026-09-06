@@ -14,7 +14,7 @@ class DriverGenerator:
 
     def _get_postal_codes(self):
         return (
-            self.address["PostalCode"]
+            self.address["COD_POSTAL"]
             .dropna()
             .astype(str)
             .str.strip()

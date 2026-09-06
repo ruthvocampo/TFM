@@ -26,30 +26,21 @@ class Order:
         self.delivery_city = delivery_city
         self.delivery_postal_code = delivery_postal_code
         self.delivery_country = delivery_country
-        self.status_history = {
-            "EN RECOGIDA": None,
-            "EN TRANSPORTE": None,
-            "LLEGADA A LA NAVE": None,
-            "PENDIENTE DE ASIGNACIÓN": None,
-            "ASIGNADO": None,
-            "RECOGIDO": None,
-            "EN REPARTO": None,
-            "ENTREGADO": None,
-            "RECHAZADO": None,
-            "CANCELADO": None,
-            "INCIDENTADO": None,
-        }
-        
-    def set_order_expected_date(self, order_expected_date):
-        self.order_expected_date =  order_expected_date
-    
+          # Historial completo de estados
+        self.status_history = {}
+
+        if status is not None and status_modified_date is not None:
+            self.status_history[status] = status_modified_date
+
     def set_order_expected_date(self, order_expected_date):
         self.order_expected_date = order_expected_date
 
-    def set_status(self, status, timestamp=None):
-        if timestamp is None:
-            timestamp = datetime.now()
+    def set_status(self, status, status_modified_date=None):
+
+        if status_modified_date is None:
+            status_modified_date = datetime.now()
 
         self.status = status
-        self.status_modified_date = timestamp
-        self.status_history[status] = timestamp
+        self.status_modified_date = status_modified_date
+
+        self.status_history[status] = status_modified_date

@@ -1,0 +1,16 @@
+{
+    "datasource": "order_events",
+    "dataset": "order_events",
+    "source": {
+        "format": "json",
+        "options": {
+            "multiLine": "true"
+        },
+        "path": "${LANDING_PATH}/order_events"
+    },
+    "sink": {
+        "layer": "bronze",
+        "format": "parquet",
+        "path": "${BRONZE_PATH}/order_events"
+    }
+}

@@ -18,31 +18,33 @@ class RouteGenerator:
         """
         Obtiene los conductores asignados a un código postal.
         """
-
         postal_code = str(postal_code).strip()
 
-        return [driver for driver in self.drivers if str(driver.zone).strip() == postal_code]
-        
+        return [
+            driver
+            for driver in self.drivers
+            if str(driver.zone).strip() == postal_code
+        ]
+
     def _get_streets_by_zone(self, postal_code):
         """
         Obtiene las calles de un código postal junto con
-        sus coordenadas geográficas.
+        sus coordenadas en formato decimal.
         """
-
         postal_code = str(postal_code).strip()
 
         streets = self.addresses[
-            self.addresses["PostalCode"].astype(str).str.strip()
+            self.addresses["COD_POSTAL"].astype(str).str.strip()
             == postal_code
         ][
-            ["Street", "Latitude", "Longitude"]
+            ["VIA_NOMBRE", "LATITUD", "LONGITUD"]
         ].dropna(
-            subset=["Street", "Latitude", "Longitude"]
+            subset=["VIA_NOMBRE", "LATITUD", "LONGITUD"]
         )
 
         return (
             streets
-            .drop_duplicates(subset=["Street"])
+            .drop_duplicates(subset=["VIA_NOMBRE"])
             .reset_index(drop=True)
         )
 
@@ -67,7 +69,7 @@ class RouteGenerator:
         )
 
         coordinates = streets[
-            ["Latitude", "Longitude"]
+            ["LATITUD", "LONGITUD"]
         ].astype(float)
 
         kmeans = KMeans(
@@ -82,7 +84,10 @@ class RouteGenerator:
             coordinates
         )
 
-        drivers = sorted(drivers_zone,key=lambda driver: driver.id_driver)
+        drivers = sorted(
+            drivers_zone,
+            key=lambda driver: driver.id_driver
+        )
 
         cluster_ids = sorted(
             streets["cluster"].unique()
@@ -106,7 +111,7 @@ class RouteGenerator:
         route_id = 1
 
         postal_codes = (
-            self.addresses["PostalCode"]
+            self.addresses["COD_POSTAL"]
             .dropna()
             .astype(str)
             .str.strip()
@@ -145,19 +150,21 @@ class RouteGenerator:
                 )
             )
 
-            for _, street in assigned_streets.iterrows():
+            for _, row in assigned_streets.iterrows():
 
                 route = Route(
                     id_route=route_id,
-                    id_driver=street["id_driver"],
+                    id_driver=row["id_driver"],
                     postal_code=postal_code,
-                    street=street["Street"]
+                    street=row["VIA_NOMBRE"]
                 )
 
                 self.routes.append(route)
 
                 route_id += 1
 
-        print(f"Generados {len(self.routes)} rutas.")
-        
+        print(
+            f"Generados {len(self.routes)} rutas."
+        )
+
         return self.routes

@@ -1,0 +1,175 @@
+{
+    "dataset": "historical_orders",
+    "fields": [
+        {
+            "name": "id_order",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "id_driver",
+            "type": "string",
+            "nullable": true
+        },
+        {
+            "name": "order_created_date",
+            "type": "timestamp",
+            "nullable": false
+        },
+        {
+            "name": "order_expected_date",
+            "type": "timestamp",
+            "nullable": false
+        },
+        {
+            "name": "status",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "status_modified_date",
+            "type": "timestamp",
+            "nullable": false
+        },
+        {
+            "name": "num_products",
+            "type": "integer",
+            "nullable": false
+        },
+        {
+            "name": "type_order",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "type_service",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "pickup_street",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "pickup_house_number",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "pickup_floor",
+            "type": "integer",
+            "nullable": true
+        },
+        {
+            "name": "pickup_letter",
+            "type": "string",
+            "nullable": true
+        },
+        {
+            "name": "pickup_city",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "pickup_postal_code",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "pickup_country",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "delivery_street",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "delivery_house_number",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "delivery_floor",
+            "type": "integer",
+            "nullable": true
+        },
+        {
+            "name": "delivery_letter",
+            "type": "string",
+            "nullable": true
+        },
+        {
+            "name": "delivery_city",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "delivery_postal_code",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "delivery_country",
+            "type": "string",
+            "nullable": false
+        },
+        {
+            "name": "en_recogida_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "en_transporte_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "llegada_a_la_nave_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "pendiente_de_asignacion_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "asignado_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "en_reparto_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "recogido_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "entregado_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "rechazado_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "cancelado_date",
+            "type": "timestamp",
+            "nullable": true
+        },
+        {
+            "name": "incidentado_date",
+            "type": "timestamp",
+            "nullable": true
+        }
+    ]
+}

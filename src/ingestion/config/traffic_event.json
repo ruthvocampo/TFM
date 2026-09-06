@@ -1,0 +1,16 @@
+{
+    "datasource": "traffic_events",
+    "dataset": "traffic_events",
+    "source": {
+        "format": "json",
+        "options": {
+            "multiLine": "true"
+        },
+        "path": "${LANDING_PATH}/traffic_events"
+    },
+    "sink": {
+        "layer": "bronze",
+        "format": "parquet",
+        "path": "${BRONZE_PATH}/traffic_events"
+    }
+}

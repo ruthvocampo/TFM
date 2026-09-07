@@ -1,17 +1,13 @@
 from pathlib import Path
 
 
-# ============================================================
-# ROOT DEL PROYECTO
-# ============================================================
 
+# ROOT DEL PROYECTO LOCAL
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-# ============================================================
-# DATA
-# ============================================================
 
+# DATOS LOCALES
 DATA_ROOT = PROJECT_ROOT / "data"
 
 DATA_ADDRESS = DATA_ROOT / "reference"
@@ -21,86 +17,80 @@ HISTORICAL_ROOT = DATA_ROOT / "historical"
 SIMULATED_ROOT = DATA_ROOT / "simulated"
 
 
-# ============================================================
-# LAKEHOUSE
-# ============================================================
 
-LAKEHOUSE_ROOT = PROJECT_ROOT / "lakehouse"
+# AZURE DATA LAKE STORAGE GEN2
+LAKEHOUSE_ROOT = "abfss://tfm@dbtfm.dfs.core.windows.net"
 
-
-# ============================================================
 # LANDING
-# ============================================================
+LANDING_ROOT = f"{LAKEHOUSE_ROOT}/landing"
 
-LANDING_ROOT = LAKEHOUSE_ROOT / "landing"
+LANDING_ORDERS = f"{LANDING_ROOT}/orders"
 
-LANDING_ORDERS = LANDING_ROOT / "orders"
+LANDING_DRIVERS = f"{LANDING_ROOT}/drivers"
 
-LANDING_DRIVERS = LANDING_ROOT / "drivers"
+LANDING_ROUTES = f"{LANDING_ROOT}/routes"
 
-LANDING_ROUTES = LANDING_ROOT / "routes"
+LANDING_ORDER_EVENTS = f"{LANDING_ROOT}/order_events"
 
-LANDING_ORDER_EVENTS = LANDING_ROOT / "order_events"
+LANDING_INCIDENT_EVENTS = f"{LANDING_ROOT}/incidents_events"
 
-LANDING_GPS = LANDING_ROOT / "gps"
+LANDING_GPS = f"{LANDING_ROOT}/gps_events"
 
-LANDING_WEATHER = LANDING_ROOT / "weather"
+LANDING_WEATHER = f"{LANDING_ROOT}/weather"
 
-LANDING_TRAFFIC = LANDING_ROOT / "traffic"
+LANDING_TRAFFIC = f"{LANDING_ROOT}/traffic"
+
+LANDING_HISTORICAL_ORDERS = f"{LANDING_ROOT}/historical_orders"
+
+LANDING_HISTORICAL_INCIDENTS = f"{LANDING_ROOT}/historical_incidents"
 
 
-# ============================================================
+
 # BRONZE
-# ============================================================
+BRONZE_ROOT = f"{LAKEHOUSE_ROOT}/bronze"
 
-BRONZE_ROOT = LAKEHOUSE_ROOT / "bronze"
+BRONZE_ORDERS = f"{BRONZE_ROOT}/orders"
 
-BRONZE_ORDERS = BRONZE_ROOT / "orders"
+BRONZE_DRIVERS = f"{BRONZE_ROOT}/drivers"
 
-BRONZE_DRIVERS = BRONZE_ROOT / "drivers"
+BRONZE_ROUTES = f"{BRONZE_ROOT}/routes"
 
-BRONZE_ROUTES = BRONZE_ROOT / "routes"
+BRONZE_ORDER_EVENTS = f"{BRONZE_ROOT}/order_events"
 
-BRONZE_ORDER_EVENTS = BRONZE_ROOT / "order_events"
+BRONZE_GPS = f"{BRONZE_ROOT}/gps"
 
-BRONZE_GPS = BRONZE_ROOT / "gps"
+BRONZE_WEATHER = f"{BRONZE_ROOT}/weather"
 
-BRONZE_WEATHER = BRONZE_ROOT / "weather"
-
-BRONZE_TRAFFIC = BRONZE_ROOT / "traffic"
+BRONZE_TRAFFIC = f"{BRONZE_ROOT}/traffic"
 
 
-# ============================================================
+
 # SILVER
-# ============================================================
+SILVER_ROOT = f"{LAKEHOUSE_ROOT}/silver"
 
-SILVER_ROOT = LAKEHOUSE_ROOT / "silver"
+SILVER_ORDERS = f"{SILVER_ROOT}/orders"
 
-SILVER_ORDERS = SILVER_ROOT / "orders"
+SILVER_DRIVERS = f"{SILVER_ROOT}/drivers"
 
-SILVER_DRIVERS = SILVER_ROOT / "drivers"
+SILVER_ROUTES = f"{SILVER_ROOT}/routes"
 
-SILVER_ROUTES = SILVER_ROOT / "routes"
+SILVER_ORDER_EVENTS = f"{SILVER_ROOT}/order_events"
 
-SILVER_ORDER_EVENTS = SILVER_ROOT / "order_events"
+SILVER_GPS = f"{SILVER_ROOT}/gps"
 
-SILVER_GPS = SILVER_ROOT / "gps"
+SILVER_WEATHER = f"{SILVER_ROOT}/weather"
 
-SILVER_WEATHER = SILVER_ROOT / "weather"
-
-SILVER_TRAFFIC = SILVER_ROOT / "traffic"
+SILVER_TRAFFIC = f"{SILVER_ROOT}/traffic"
 
 
-# ============================================================
+
 # GOLD
-# ============================================================
+GOLD_ROOT = f"{LAKEHOUSE_ROOT}/gold"
 
-GOLD_ROOT = LAKEHOUSE_ROOT / "gold"
+GOLD_SLA_RISK = f"{GOLD_ROOT}/sla_risk"
 
-GOLD_SLA_RISK = GOLD_ROOT / "sla_risk"
+GOLD_DRIVER_PERFORMANCE = f"{GOLD_ROOT}/driver_performance"
 
-GOLD_DRIVER_PERFORMANCE = GOLD_ROOT / "driver_performance"
+GOLD_ZONE_PERFORMANCE = f"{GOLD_ROOT}/zone_performance"
 
-GOLD_ZONE_PERFORMANCE = GOLD_ROOT / "zone_performance"
-
-GOLD_RECOMMENDATIONS = GOLD_ROOT / "recommendations"
+GOLD_RECOMMENDATIONS = f"{GOLD_ROOT}/recommendations"

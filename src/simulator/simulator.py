@@ -19,66 +19,65 @@ from src.apis.weather_api import WeatherApi
 from src.apis.traffic_api import TrafficApi
 
 from src.config.setup import DATA_ADDRESS
-from src.config.setup import LANDING_ROOT
-
+from src.config.setup import *
+from src.simulator.azure_storage import write_file
 
 class Simulator:
 
     def __init__(self, fecha_actual):
 
-        # =====================================================
+        
         # DATOS
-        # =====================================================
+        
 
         self.drivers = None
         self.orders = None
         self.routes = None
         self.historical_orders = None
 
-        # =====================================================
+        
         # EVENTOS
-        # =====================================================
+        
 
         self.gps_events = []
         self.order_events = []
         self.incidents = []
 
-        # =====================================================
+        
         # HISTÓRICO DE INCIDENCIAS
-        # =====================================================
+        
 
         self.historical_incidents = []
 
-        # =====================================================
+        
         # DATOS REALES
-        # =====================================================
+        
 
         self.traffic = None
         self.weather = None
 
-        # =====================================================
+        
         # HORA DE SIMULACIÓN
-        # =====================================================
+        
 
         self.fecha_actual = fecha_actual
 
-        # =====================================================
+        
         # GENERADORES DE EVENTOS
         # Se crean una sola vez para mantener su estado
-        # =====================================================
+        
 
         self.order_event_generator = None
         self.gps_event_generator = None
 
-    # =========================================================
+    
     # GENERAR DATOS INICIALES
-    # =========================================================
 
     def generate_initial_data(self):
 
-        # =====================================================
+        
         # 1. DIRECCIONES
-        # =====================================================
+        
         spain_path = DATA_ADDRESS / "spain.csv"
         madrid_path = DATA_ADDRESS / "213605-4-callejero-oficial-madrid-csv.csv"
         
@@ -88,9 +87,9 @@ class Simulator:
     
         address_madrid = addresses.get_address_madrid_df()
 
-        # =====================================================
+        
         # 2. REPARTIDORES
-        # =====================================================
+        
 
         driver_generator = DriverGenerator(
             [],
@@ -99,9 +98,9 @@ class Simulator:
 
         self.drivers = driver_generator.create_drivers(270)
 
-        # =====================================================
+        
         # 3. RUTAS
-        # =====================================================
+        
 
         route_generator = RouteGenerator(
             drivers=self.drivers,
@@ -111,9 +110,9 @@ class Simulator:
 
         self.routes = route_generator.create_routes()
 
-        # =====================================================
+        
         # 4. HISTÓRICO DE PEDIDOS
-        # =====================================================
+        
 
         historical_generator = OrderHistoricalGenerator(
             drivers=self.drivers,
@@ -129,9 +128,9 @@ class Simulator:
             )
         )
 
-        # =====================================================
+        
         # 5. HISTÓRICO DE INCIDENCIAS
-        # =====================================================
+        
 
         incident_historical_generator = (
             IncidentHistoricalGenerator(
@@ -150,9 +149,9 @@ class Simulator:
             f"incidencias históricas."
         )
 
-        # =====================================================
+        
         # 6. PEDIDOS PARA LA SIMULACIÓN
-        # =====================================================
+        
 
         order_generator = OrderGenerator(
             historical_orders=self.historical_orders,
@@ -163,9 +162,9 @@ class Simulator:
             order_generator.get_orders_for_today()
         )
 
-        # =====================================================
+        
         # 7. GENERADOR DE ORDER EVENTS
-        # =====================================================
+        
 
         self.order_event_generator = OrderEvents(
             self.orders,
@@ -174,18 +173,18 @@ class Simulator:
             self.fecha_actual
         )
 
-        # =====================================================
+        
         # 8. GENERADOR DE GPS EVENTS
-        # =====================================================
+        
 
         self.gps_event_generator = GPSEvents(
             self.drivers,
             self.fecha_actual
         )
 
-        # =====================================================
+        
         # 9. WEATHER
-        # =====================================================
+        
 
         weather_generator = WeatherEventGenerator()
 
@@ -193,9 +192,9 @@ class Simulator:
             weather_generator.generate_events()
         )
 
-        # =====================================================
+        
         # 10. TRAFFIC
-        # =====================================================
+        
 
         traffic_api = TrafficApi()
 
@@ -208,10 +207,7 @@ class Simulator:
             self.routes
         )
 
-    # =========================================================
     # GENERAR ORDER EVENTS
-    # =========================================================
-
     def create_order_events(self):
 
         if self.order_event_generator is None:
@@ -238,9 +234,9 @@ class Simulator:
 
         return events
 
-    # =========================================================
+
     # GENERAR GPS EVENTS
-    # =========================================================
+
     def create_gps_events(self):
 
         if self.gps_event_generator is None:
@@ -259,9 +255,9 @@ class Simulator:
 
         return events
 
-    # =========================================================
+
     # GENERAR Y GUARDAR EVENTOS DE SIMULACIÓN
-    # =========================================================
+
 
     def generate_simulation_events(self):
 
@@ -270,17 +266,17 @@ class Simulator:
         hora= f"{self.fecha_actual.hour:02d}"
         print(hora)
 
-        # =====================================================
+        
         # GENERAR
-        # =====================================================
+        
 
         self.order_events = self.create_order_events()
 
         self.gps_events = self.create_gps_events()
 
-        # =====================================================
+        
         # RUTAS
-        # =====================================================
+        
 
         gps_events_path = (LANDING_ROOT/ "gps_events")
 
@@ -288,9 +284,9 @@ class Simulator:
 
         incident_events_path = (LANDING_ROOT/ "incidents_events")
 
-        # =====================================================
+        
         # DIRECTORIOS
-        # =====================================================
+        
 
         gps_events_path.mkdir(
             parents=True,
@@ -307,9 +303,9 @@ class Simulator:
             exist_ok=True
         )
 
-        # =====================================================
+        
         # GPS EVENTS
-        # =====================================================
+        
 
         with open(
             gps_events_path / "gps_events.json",
@@ -325,9 +321,9 @@ class Simulator:
                 default=lambda obj: obj.isoformat()
             )
 
-        # =====================================================
+        
         # ORDER EVENTS
-        # =====================================================
+        
 
         with open(
             order_events_path / "order_events.json",
@@ -343,9 +339,9 @@ class Simulator:
                 default=lambda obj: obj.isoformat()
             )
 
-        # =====================================================
+        
         # INCIDENTS
-        # =====================================================
+        
 
         with open(
             incident_events_path / "incident_events.json",
@@ -370,67 +366,17 @@ class Simulator:
             self.incidents
         )
 
-    # =========================================================
+
     # GUARDAR DATOS INICIALES
-    # =========================================================
+
 
     def generate_files(self):
-
-        historical_path = (
-            LANDING_ROOT / "historical_orders"
-        )
-
-        orders_path = (
-            LANDING_ROOT / "orders"
-        )
-
-        drivers_path = (
-            LANDING_ROOT / "drivers"
-        )
-
-        routes_path = (
-            LANDING_ROOT / "routes"
-        )
-
-        historical_incidents_path = (
-            LANDING_ROOT / "historical_incidents"
-        )
-
-        # =====================================================
-        # CREAR DIRECTORIOS
-        # =====================================================
-
-        historical_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        orders_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        drivers_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        routes_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        historical_incidents_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        # =====================================================
+        
         # HISTÓRICO DE ORDERS
         #
         # Aquí NO aplanamos status_history.
         # Se conserva para Silver.
-        # =====================================================
+        
 
         historical_records = []
 
@@ -444,16 +390,10 @@ class Simulator:
             historical_records
         )
 
-        historical_df.to_csv(
-            historical_path / "historical_orders.csv",
-            index=False,
-            encoding="utf-8-sig"
-        )
+        write_file(LANDING_HISTORICAL_ORDERS /"historical_orders.csv",historical_df)
 
-        # =====================================================
+        
         # ORDERS ACTUALES
-        # =====================================================
-
         orders_df = pd.DataFrame(
             [
                 vars(order)
@@ -461,15 +401,10 @@ class Simulator:
             ]
         )
 
-        orders_df.to_excel(
-            orders_path / "orders.xlsx",
-            index=False
-        )
+        write_file( LANDING_ORDERS /"orders.xlsx",orders_df)
 
-        # =====================================================
+        
         # DRIVERS
-        # =====================================================
-
         drivers_df = pd.DataFrame(
             [
                 vars(driver)
@@ -477,14 +412,11 @@ class Simulator:
             ]
         )
 
-        drivers_df.to_parquet(
-            drivers_path / "drivers.parquet",
-            index=False
-        )
+        write_file(LANDING_DRIVERS / "drivers.parquet",drivers_df)
 
-        # =====================================================
+        
         # ROUTES
-        # =====================================================
+        
 
         routes_df = pd.DataFrame(
             [
@@ -493,42 +425,24 @@ class Simulator:
             ]
         )
 
-        routes_df.to_json(
-            routes_path / "routes.json",
-            orient="records",
-            force_ascii=False
-        )
+        write_file(LANDING_ROUTES /"routes.json",routes_df)
 
-        # =====================================================
+
+        
         # HISTÓRICO DE INCIDENCIAS
-        # =====================================================
-
-        historical_incidents_df = pd.DataFrame(
-            [
+        historical_incidents_df = pd.DataFrame([
                 vars(incident)
                 for incident
                 in self.historical_incidents
-            ]
-        )
+            ])
 
-        historical_incidents_df.to_json(
-            historical_incidents_path
-            / "historical_incidents.json",
-            orient="records",
-            force_ascii=False,
-            indent=4,
-            date_format="iso"
-        )
+        write_file(LANDING_HISTORICAL_INCIDENTS/"historical_incidents.json",historical_incidents_df)
 
-    # =========================================================
+
     # DATOS REALES
-    # =========================================================
-
     def generate_real_data_files(self):
 
-        fecha = self.fecha_actual.strftime(
-            "%Y-%m-%d"
-        )
+        fecha = self.fecha_actual.strftime("%Y-%m-%d")
 
         weather_path = (
             LANDING_ROOT
@@ -584,9 +498,9 @@ class Simulator:
             self.traffic
         )
 
-    # =========================================================
+
     # AVANZAR TIEMPO DE SIMULACIÓN
-    # =========================================================
+
 
     def advance_time(self, minutes):
 

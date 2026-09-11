@@ -9,3 +9,10 @@ fastparquet
 azure-storage-file-datalake
 azure-identity
 confluent-kafka
+faker
+confluent-kafka
+fastavro
+httpx
+authlib
+cachetools
+attrs

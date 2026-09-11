@@ -270,41 +270,43 @@ class WeatherEventGenerator:
         for station in snapshot:
 
             self.event_counter += 1
+            timestamp = station["timestamp"]
 
+            if isinstance(timestamp, str):
+                timestamp = datetime.fromisoformat(
+                    timestamp.replace("Z", "+00:00")
+                )
+                
+            measurements = {}
+
+            for magnitude_name, data in station["measurements"].items():
+
+                measurements[str(magnitude_name)] = {
+                    "magnitude_code": str(data["magnitude_code"]),
+                    "value": (
+                        float(data["value"])
+                        if data.get("value") is not None
+                        else None
+                    ),
+                    "validation": (
+                        str(data["validation"])
+                        if data.get("validation") is not None
+                        else None
+                    )
+                }
+                            
             event = {
-
-                "weather_event_id":
-                    self.event_counter,
-
-                "province":
-                    station["province"],
-
-                "municipality":
-                    station["municipality"],
-
-                "station":
-                    station["station"],
-
-                "station_name":
-                    station["station_name"],
-
-                "year":
-                    station["year"],
-
-                "month":
-                    station["month"],
-
-                "day":
-                    station["day"],
-
-                "hour":
-                    station["hour"],
-
-                "timestamp":
-                    station["timestamp"],
-
-                "measurements":
-                    station["measurements"]
+                "weather_event_id": int(self.event_counter),
+                "province": str(station["province"]),
+                "municipality": str(station["municipality"]),
+                "station": str(station["station"]),
+                "station_name": str(station["station_name"]),
+                "year": int(station["year"]),
+                "month": int(station["month"]),
+                "day": int(station["day"]),
+                "hour": int(station["hour"]),
+                "timestamp": timestamp,
+                "measurements": measurements
             }
 
             events.append(event)

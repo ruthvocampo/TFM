@@ -1,68 +1,263 @@
+from pathlib import Path
+
 from confluent_kafka import Producer
-from confluent_kafka import admin
 from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.serialization import SerializationContext, MessageField
+
+from confluent_kafka.schema_registry import SchemaRegistryClient, Schema
+from confluent_kafka.schema_registry.avro import AvroSerializer
 
 
 class KafkaProducer:
-    
+
     def __init__(self):
-        
-        self.config= self.read_config()
-        # creates a new producer instance
-        self.producer = Producer(self.config)
-        # AdminClient para gestionar topics
-        self.admin_client = AdminClient(self.config)
-        
+        self.config = self.read_config()
+
+        # ---------------------------------------------------------
+        # Kafka
+        # ---------------------------------------------------------
+        kafka_config = {
+            "bootstrap.servers": self.config["bootstrap.servers"],
+            "security.protocol": self.config["security.protocol"],
+            "sasl.mechanisms": self.config["sasl.mechanisms"],
+            "sasl.username": self.config["sasl.username"],
+            "sasl.password": self.config["sasl.password"],
+            "client.id": self.config.get("client.id", "logistics-simulator"),
+        }
+
+        self.producer = Producer(kafka_config)
+        self.admin_client = AdminClient(kafka_config)
+
+        # ---------------------------------------------------------
+        # Schema Registry
+        # ---------------------------------------------------------
+        schema_registry_config = {
+            "url": self.config["SCHEMA_REGISTRY_URL"],
+            "basic.auth.user.info": (
+                f'{self.config["SCHEMA_REGISTRY_API_KEY"]}:'
+                f'{self.config["SCHEMA_REGISTRY_API_SECRET"]}'
+            ),
+        }
+
+        self.schema_registry_client = SchemaRegistryClient(
+            schema_registry_config
+        )
+
+        # ---------------------------------------------------------
+        # Avro serializers
+        # ---------------------------------------------------------
+        base_dir = Path(__file__).resolve().parents[2]
+        schemas_dir = base_dir / "src"/"kafka"/"schemas"
+
+        self.serializers = {}
+
+        schema_files = {
+            "order-events": schemas_dir / "order_event.avsc",
+            "gps-events": schemas_dir / "gps_event.avsc",
+            "incident-events": schemas_dir / "incident_event.avsc",
+            "traffic-events": schemas_dir / "traffic_event.avsc",
+            "weather-events": schemas_dir / "weather_event.avsc",
+        }
+
+        for topic, schema_path in schema_files.items():
+            self.serializers[topic] = self.create_serializer(
+                topic,
+                schema_path
+            )
+
+    # =============================================================
+    # CONFIG
+    # =============================================================
+
     def read_config(self):
-        # reads the client configuration from client.properties
-        # and returns it as a key-value map
         config = {}
-        with open(".env") as fh:
+
+        env_path = Path(".env")
+
+        if not env_path.exists():
+            raise FileNotFoundError(
+                "No se ha encontrado el archivo .env"
+            )
+
+        with open(env_path, "r", encoding="utf-8") as fh:
+
             for line in fh:
                 line = line.strip()
-                if len(line) != 0 and line[0] != "#":
-                    parameter, value = line.strip().split('=', 1)
-                    config[parameter] = value.strip()
+
+                if not line:
+                    continue
+
+                if line.startswith("#"):
+                    continue
+
+                parameter, value = line.split("=", 1)
+
+                parameter = parameter.strip()
+                value = value.strip()
+
+                # Quitar comillas si existen
+                if (
+                    len(value) >= 2
+                    and value[0] == '"'
+                    and value[-1] == '"'
+                ):
+                    value = value[1:-1]
+
+                if (
+                    len(value) >= 2
+                    and value[0] == "'"
+                    and value[-1] == "'"
+                ):
+                    value = value[1:-1]
+
+                config[parameter] = value
+
         return config
 
+    # =============================================================
+    # SCHEMA REGISTRY / AVRO
+    # =============================================================
+
+    def create_serializer(self, topic, schema_path):
+
+        print(
+            f"Registrando schema para {topic}: "
+            f"{schema_path}"
+        )
+
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema_str = f.read()
+
+        # El subject que utilizamos será:
+        #
+        # order-events-value
+        # gps-events-value
+        # ...
+        #
+        subject = f"{topic}-value"
+
+        schema = Schema(
+            schema_str,
+            "AVRO"
+        )
+
+        # Registrar explícitamente antes de producir
+        schema_id = self.schema_registry_client.register_schema(
+            subject,
+            schema
+        )
+
+        print(
+            f"Schema registrado: {subject} "
+            f"(id={schema_id})"
+        )
+
+        serializer = AvroSerializer(
+            self.schema_registry_client,
+            schema_str,
+            conf={
+                "auto.register.schemas": False
+            }
+        )
+
+        return serializer
+
+    # =============================================================
+    # PRODUCE
+    # =============================================================
+
     def produce(self, topic, key, value):
-       
 
-        # produces message
-        self.producer.produce(topic, key=key, value=value)
-        print(f"Produced message to topic {topic}: key = {key:12} value = {value:12}")
+        serializer = self.serializers[topic]
 
-        # send any outstanding or buffered messages to the Kafka broker
-        self.producer.flush()
-        
-        
+        context = SerializationContext(
+            topic,
+            MessageField.VALUE
+        )
+
+        serialized_value = serializer(
+            value,
+            context
+        )
+
+        self.producer.produce(
+            topic=topic,
+            key=str(key),
+            value=serialized_value
+        )
+
+    # =============================================================
+    # FLUSH
+    # =============================================================
+
+    def flush(self):
+        remaining = self.producer.flush()
+
+        if remaining > 0:
+            print(
+                f"Advertencia: quedan {remaining} mensajes pendientes."
+            )
+
+    # =============================================================
+    # TOPICS
+    # =============================================================
+
     def create_topics(self):
-    
-            topics = [
-                NewTopic("order-events", num_partitions=3),
-                NewTopic("gps-events", num_partitions=3),
-                NewTopic("incident-events", num_partitions=3),
-                NewTopic("traffic-events", num_partitions=3),
-                NewTopic("weather-events", num_partitions=3)
-            ]
-    
-            existing_topics = self.admin_client.list_topics(timeout=10).topics
-    
-            topics_to_create = [
-                topic
-                for topic in topics
-                if topic.topic not in existing_topics
-            ]
-    
-            if not topics_to_create:
-                print("Todos los topics ya existen.")
-                return
-    
-            futures = self.admin_client.create_topics(topics_to_create)
-    
-            for topic, future in futures.items():
-                try:
-                    future.result()
-                    print(f"Topic creado: {topic}")
-                except Exception as e:
-                    print(f"Error creando topic {topic}: {e}")
+
+        topics = [
+            NewTopic(
+                "order-events",
+                num_partitions=3
+            ),
+            NewTopic(
+                "gps-events",
+                num_partitions=3
+            ),
+            NewTopic(
+                "incident-events",
+                num_partitions=3
+            ),
+            NewTopic(
+                "traffic-events",
+                num_partitions=3
+            ),
+            NewTopic(
+                "weather-events",
+                num_partitions=3
+            ),
+        ]
+
+        existing_topics = (
+            self.admin_client
+            .list_topics(timeout=10)
+            .topics
+        )
+
+        topics_to_create = [
+            topic
+            for topic in topics
+            if topic.topic not in existing_topics
+        ]
+
+        if not topics_to_create:
+            print("Todos los topics ya existen.")
+            return
+
+        futures = self.admin_client.create_topics(
+            topics_to_create
+        )
+
+        for topic, future in futures.items():
+
+            try:
+                future.result()
+
+                print(
+                    f"Topic creado: {topic}"
+                )
+
+            except Exception as e:
+
+                print(
+                    f"Error creando topic {topic}: {e}"
+                )

@@ -17,30 +17,39 @@ INCIDENT_REASONS = [
 
 
 OBSERVATIONS = {
+
     "DIRECCIÓN INCORRECTA": [
         "La dirección indicada no permite localizar el domicilio."
     ],
+
     "CÓDIGO POSTAL INCORRECTO": [
         "El código postal indicado no coincide con la dirección."
     ],
+
     "FALTA NÚMERO DE PISO": [
         "No se ha indicado el número de piso."
     ],
+
     "NO ES POSIBLE CONTACTAR CON EL DESTINATARIO": [
         "No es posible contactar con el destinatario."
     ],
+
     "DESTINATARIO AUSENTE": [
         "El destinatario no se encuentra en el domicilio."
     ],
+
     "ACCESO AL DOMICILIO NO POSIBLE": [
         "No es posible acceder al edificio."
     ],
+
     "PAQUETE DAÑADO": [
         "El paquete presenta daños visibles."
     ],
+
     "PAQUETE NO LOCALIZADO": [
         "El paquete no ha podido ser localizado."
     ],
+
     "OTRO": [
         "Incidencia no contemplada en las categorías anteriores."
     ]
@@ -52,6 +61,7 @@ class IncidentGenerator:
     def __init__(self):
 
         self.incidents = []
+
         self.incident_counter = 0
 
     def create_incident(
@@ -71,18 +81,31 @@ class IncidentGenerator:
         )
 
         incident = Incident(
-            id_incident=f"INC{self.incident_counter:05d}",
+
+            id_incident=(
+                f"INC{self.incident_counter:05d}"
+            ),
+
             id_order=order.id_order,
+
             id_driver=order.id_driver,
+
             incident_date=incident_date,
+
             incident_reason=reason,
+
             observations=observations,
+
             resolved=False,
+
             resolution_date=None,
-            resolution_action=None,
+
+            resolution_action=None
         )
 
-        self.incidents.append(incident)
+        self.incidents.append(
+            incident
+        )
 
         return incident
 

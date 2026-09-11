@@ -1,41 +1,17 @@
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime
 
 
 class TrafficApi:
 
     def __init__(self, fecha_actual):
-
         self.API_URL = (
             "https://informo.madrid.es/informo/tmadrid/pm.xml"
         )
-
         self.fecha_actual = fecha_actual
 
-    def parse_fecha_hora(self, fecha_hora):
-
-        if not fecha_hora:
-            return None
-
-        formatos = [
-            "%Y-%m-%d %H:%M:%S",
-            "%d/%m/%Y %H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S",
-        ]
-
-        for formato in formatos:
-
-            try:
-                return datetime.strptime(
-                    fecha_hora,
-                    formato
-                )
-
-            except ValueError:
-                continue
-
-        return None
+    def update_time(self, fecha_actual):
+        self.fecha_actual = fecha_actual
 
     def get_info(self):
 
@@ -43,88 +19,49 @@ class TrafficApi:
             self.API_URL,
             timeout=(10, 120)
         )
-
         response.raise_for_status()
 
-        root = ET.fromstring(
-            response.content
-        )
+        root = ET.fromstring(response.content)
 
-        fecha_hora = root.findtext(
-            "fecha_hora"
-        )
-
-        timestamp = self.parse_fecha_hora(
-            fecha_hora
-        )
-
-        if timestamp is None:
-
-            raise Exception(
-                f"ERROR: fecha_hora inválida: "
-                f"{fecha_hora}"
-            )
-
-        # -----------------------------------------------------
-        # SOLO ACEPTAR DATOS ANTERIORES A fecha_actual
-        # -----------------------------------------------------
-
-        if timestamp >= self.fecha_actual:
-
-            print(
-                f"El tráfico disponible ({timestamp}) "
-                f"no es anterior a fecha_actual "
-                f"({self.fecha_actual})."
-            )
-
-            return []
+        fecha_hora_api = root.findtext("fecha_hora")
 
         records = []
 
         for pm in root.findall("pm"):
 
             record = {
+            "fecha_hora": self.fecha_actual,
 
-                "fecha_hora":
-                    fecha_hora,
+            "idelem": pm.findtext("idelem"),
+            "descripcion": pm.findtext("descripcion"),
 
-                "idelem":
-                    pm.findtext("idelem"),
+            "accesoAsociado": pm.findtext("accesoAsociado"),
 
-                "descripcion":
-                    pm.findtext("descripcion"),
+            "intensidad": int(pm.findtext("intensidad")),
+            "ocupacion": int(pm.findtext("ocupacion")),
+            "carga": int(pm.findtext("carga")),
+            "nivelServicio": int(pm.findtext("nivelServicio")),
+            "intensidadSat": int(pm.findtext("intensidadSat")),
 
-                "accesoAsociado":
-                    pm.findtext("accesoAsociado"),
+            "error": pm.findtext("error"),
 
-                "intensidad":
-                    pm.findtext("intensidad"),
+            "subarea": pm.findtext("subarea"),
 
-                "ocupacion":
-                    pm.findtext("ocupacion"),
-
-                "carga":
-                    pm.findtext("carga"),
-
-                "nivelServicio":
-                    pm.findtext("nivelServicio"),
-
-                "intensidadSat":
-                    pm.findtext("intensidadSat"),
-
-                "error":
-                    pm.findtext("error"),
-
-                "subarea":
-                    pm.findtext("subarea"),
-
-                "st_x":
-                    pm.findtext("st_x"),
-
-                "st_y":
-                    pm.findtext("st_y"),
-            }
+            "st_x": self._to_float(pm.findtext("st_x")),
+            "st_y": self._to_float(pm.findtext("st_y")),
+        }
 
             records.append(record)
 
         return records
+
+    @staticmethod
+    def _to_float(value):
+
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None

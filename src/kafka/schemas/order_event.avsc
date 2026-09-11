@@ -1,11 +1,11 @@
 {
   "type": "record",
   "name": "OrderEvent",
-  "namespace": "tfm.kafka",
+  "namespace": "com.mycompany.events",
   "fields": [
     {
       "name": "id_event",
-      "type": "int"
+      "type": "long"
     },
     {
       "name": "id_order",
@@ -13,8 +13,7 @@
     },
     {
       "name": "id_driver",
-      "type": ["null", "string"],
-      "default": null
+      "type": "string"
     },
     {
       "name": "type_service",
@@ -29,8 +28,11 @@
       "type": "string"
     },
     {
-      "name": "ingestion_time",
-      "type": "string"
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
     }
   ]
 }

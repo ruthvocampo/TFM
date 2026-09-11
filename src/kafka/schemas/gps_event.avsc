@@ -1,15 +1,22 @@
 {
   "type": "record",
   "name": "GPSEvent",
-  "namespace": "tfm.kafka",
+  "namespace": "com.mycompany.events",
   "fields": [
     {
-      "name": "id_event",
-      "type": "int"
+      "name": "gps_event_id",
+      "type": "long"
     },
     {
       "name": "id_driver",
       "type": "string"
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
     },
     {
       "name": "latitude",
@@ -20,12 +27,21 @@
       "type": "double"
     },
     {
-      "name": "timestamp",
+      "name": "id_route",
+      "type": "long"
+    },
+    {
+      "name": "street",
       "type": "string"
     },
     {
-      "name": "ingestion_time",
+      "name": "house_number",
       "type": "string"
+    },
+    {
+      "name": "priority",
+      "type": "int",
+      "default": 0
     }
   ]
 }

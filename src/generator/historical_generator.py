@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 import random
-
+import numpy as np
 import pandas as pd
-
+from faker import Faker
 from src.objects.order import Order
 
 
@@ -62,18 +62,12 @@ STATUS_COLUMNS = {
 
 class OrderHistoricalGenerator:
 
-    def __init__(
-        self,
-        drivers,
-        address_madrid,
-        address_spain,
-        fecha_actual
-    ):
+    def __init__(self,drivers, address_madrid, address_spain,fecha_actual):
         self.drivers = drivers
         self.address_madrid = address_madrid
         self.address_spain = address_spain
         self.fecha_actual = fecha_actual
-
+        self.fake = Faker("es_ES")
         self.historical_orders = []
 
     def create_historical(self, n_orders, min_pending_today=600):
@@ -248,21 +242,19 @@ class OrderHistoricalGenerator:
 
                 type_order=type_order,
                 type_service=type_service,
-
+                sender = self.fake.name(),
                 pickup_street=pickup_address["VIA_NOMBRE"],
                 pickup_house_number=pickup_address["NUMERO"],
-                pickup_floor=None,
-                pickup_letter=None,
+                pickup_floor= np.where(pickup_address['TIPO_NDP']=='PORTAL',pickup_address['PLANTA'],pd.NA),
+                pickup_letter= np.where(pickup_address['TIPO_NDP']=='PORTAL',pickup_address['LETRA'],pd.NA),
                 pickup_city=pickup_address["PROVINCIA"],
-                pickup_postal_code=str(
-                    pickup_address["COD_POSTAL"]
-                ).strip(),
+                pickup_postal_code=str(pickup_address["COD_POSTAL"]).strip(),
                 pickup_country=pickup_address["PAIS"],
-
+                destinatary = self.fake.name(),
                 delivery_street=delivery_address["VIA_NOMBRE"],
                 delivery_house_number=delivery_address["NUMERO"],
-                delivery_floor=None,
-                delivery_letter=None,
+                delivery_floor= np.where(delivery_address['TIPO_NDP']=='PORTAL',delivery_address['PLANTA'],pd.NA),
+                delivery_letter= np.where(delivery_address['TIPO_NDP']=='PORTAL',delivery_address['LETRA'],pd.NA),
                 delivery_city=delivery_address["PROVINCIA"],
                 delivery_postal_code=str(
                     delivery_address["COD_POSTAL"]

@@ -12,14 +12,11 @@ class OrderGenerator:
         Obtiene los pedidos que llegaron a la nave durante
         la madrugada y siguen pendientes de asignación.
         """
-
-        today = datetime.now().date()
-
         self.orders = [order
             for order in self.historical_orders
             if (
                 order.status in ["PENDIENTE DE ASIGNACIÓN ENTREGA", "PENDIENTE DE ASIGNACIÓN RECOGIDA"]
-                and order.status_modified_date.date() == today
+                and order.status_modified_date.date() == self.fecha_actual.date()
             )
         ]
 

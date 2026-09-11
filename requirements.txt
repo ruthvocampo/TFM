@@ -6,3 +6,6 @@ scikit-learn
 openpyxl
 pyarrow
 fastparquet
+azure-storage-file-datalake
+azure-identity
+confluent-kafka

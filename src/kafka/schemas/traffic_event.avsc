@@ -1,0 +1,93 @@
+{
+  "type": "record",
+  "name": "TrafficEvent",
+  "namespace": "tfm.kafka",
+  "fields": [
+    {
+      "name": "traffic_event_id",
+      "type": "long"
+    },
+    {
+      "name": "timestamp",
+      "type": "string"
+    },
+    {
+      "name": "measurements",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "TrafficMeasurement",
+          "fields": [
+            {
+              "name": "fecha_hora",
+              "type": "string"
+            },
+            {
+              "name": "idelem",
+              "type": "string"
+            },
+            {
+              "name": "descripcion",
+              "type": "string"
+            },
+            {
+              "name": "accesoAsociado",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "intensidad",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "ocupacion",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "carga",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "nivelServicio",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "intensidadSat",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "error",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "subarea",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "st_x",
+              "type": ["null", "string"],
+              "default": null
+            },
+            {
+              "name": "st_y",
+              "type": ["null", "string"],
+              "default": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ingestion_time",
+      "type": "string"
+    }
+  ]
+}

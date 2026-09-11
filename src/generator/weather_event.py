@@ -2,8 +2,6 @@ from datetime import datetime
 from src.apis.weather_api import WeatherApi
 
 
-# MAGNITUDES METEOROLÓGICAS
-
 MAGNITUDES = {
     "81": "VELOCIDAD_VIENTO",
     "82": "DIRECCION_VIENTO",
@@ -14,9 +12,6 @@ MAGNITUDES = {
     "89": "PRECIPITACION"
 }
 
-
-# ESTACIONES METEOROLÓGICAS
-# 
 
 STATIONS = {
     "4": "Plaza España",
@@ -50,40 +45,14 @@ STATIONS = {
 
 class WeatherEventGenerator:
 
-    def __init__(self):
-
+    def __init__(self,  fecha_actual):
+        self.fecha_actual =  fecha_actual
         self.api = WeatherApi()
-
         self.event_counter = 0
 
-
-    # BUSCAR ÚLTIMA HORA DISPONIBLE
-    def get_latest_hour(self, data):
-
-        latest_hour = None
-
-        for record in data:
-
-            for hour in range(23, 0, -1):
-
-                hour_key = f"H{hour:02d}"
-                validation_key = f"V{hour:02d}"
-
-                value = record.get(hour_key)
-                validation = record.get(validation_key)
-
-                # El dato existe y está validado
-                if (
-                    value not in (None, "", "0")
-                    and validation == "V"
-                ):
-
-                    if latest_hour is None or hour > latest_hour:
-                        latest_hour = hour
-
-                    break
-
-        return latest_hour
+    # ---------------------------------------------------------
+    # CREAR DATETIME DE UN REGISTRO
+    # ---------------------------------------------------------
 
     def create_timestamp(self, record, hour):
 
@@ -106,37 +75,117 @@ class WeatherEventGenerator:
 
             return None
 
-    # GENERAR EVENTOS
-    def generate_events(self):
+    # ---------------------------------------------------------
+    # BUSCAR LA ÚLTIMA HORA ANTERIOR A fecha_actual
+    # ---------------------------------------------------------
 
-        # 1. Obtener datos de la API
+    def get_latest_datetime(self, data):
+
+        latest_datetime = None
+
+        for record in data:
+
+            for hour in range(24):
+
+                hour_key = f"H{hour:02d}"
+                validation_key = f"V{hour:02d}"
+
+                value = record.get(hour_key)
+                validation = record.get(validation_key)
+
+                # El dato no existe
+                if value in (None, "", "0"):
+                    continue
+
+                # El dato no está validado
+                if validation != "V":
+                    continue
+
+                timestamp = self.create_timestamp(
+                    record,
+                    hour
+                )
+
+                if timestamp is None:
+                    continue
+
+                # IMPORTANTE:
+                # Solo aceptamos datos ANTERIORES
+                # a fecha_actual.
+                if timestamp >= self.fecha_actual:
+                    continue
+
+                if (
+                    latest_datetime is None
+                    or timestamp > latest_datetime
+                ):
+                    latest_datetime = timestamp
+
+        return latest_datetime
+
+    # ---------------------------------------------------------
+    # OBTENER SNAPSHOT DE LA ÚLTIMA HORA DISPONIBLE
+    # ---------------------------------------------------------
+
+    def get_snapshot(self):
 
         data = self.api.get_info()
 
         if not data:
             return []
 
+        latest_datetime = self.get_latest_datetime(
+            data)
 
-        
-        # 2. Obtener última hora disponible
+        if latest_datetime is None:
 
-        latest_hour = self.get_latest_hour(data)
+            print(
+                "No hay datos meteorológicos "
+                "anteriores a la fecha actual."
+            )
 
-        if latest_hour is None:
             return []
 
-
         print(
-            f"Última hora disponible: "
-            f"{latest_hour:02d}:00"
+            f"Fecha actual: "
+            f"{self.fecha_actual.strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
+        print(
+            f"Última hora meteorológica disponible: "
+            f"{latest_datetime.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
-        # 3. Recorrer los registros
+        latest_hour = latest_datetime.hour
 
-        events = []
+        # -----------------------------------------------------
+        # AGRUPAR POR ESTACIÓN
+        # -----------------------------------------------------
+
+        stations = {}
 
         for record in data:
+
+            timestamp = self.create_timestamp(
+                record,
+                latest_hour
+            )
+
+            # Solo queremos registros de la hora encontrada
+            if timestamp != latest_datetime:
+                continue
+
+            station_code = str(
+                record.get("ESTACION")
+            )
+
+            if not station_code:
+                continue
+
+            station_name = STATIONS.get(
+                station_code,
+                "DESCONOCIDA"
+            )
 
             magnitude_code = str(
                 record.get("MAGNITUD")
@@ -147,19 +196,11 @@ class WeatherEventGenerator:
                 "DESCONOCIDA"
             )
 
-
-            
-            # 4. Obtener valor de la última hora
-
             hour_key = f"H{latest_hour:02d}"
             validation_key = f"V{latest_hour:02d}"
 
             value = record.get(hour_key)
             validation = record.get(validation_key)
-
-
-            # 5. Comprobar que existe y es válido
-            
 
             if value in (None, "", "0"):
                 continue
@@ -167,40 +208,67 @@ class WeatherEventGenerator:
             if validation != "V":
                 continue
 
-
-            # 6. Convertir valor
             try:
-
                 value = float(value)
-
             except (ValueError, TypeError):
-
                 continue
 
+            # Crear estación
+            if station_code not in stations:
 
-        
-            # 7. Timestamp
-            timestamp = self.create_timestamp(
-                record,
-                latest_hour
-            )
+                stations[station_code] = {
 
-            if timestamp is None:
-                continue
+                    "station": station_code,
 
+                    "station_name": station_name,
 
-            # 8. Información de la estación
-            station_code = str(
-                record.get("ESTACION")
-            )
+                    "province": "Madrid",
 
-            station_name = STATIONS.get(
-                station_code,
-                "DESCONOCIDA"
-            )
+                    "municipality": "Madrid",
 
+                    "year": record.get("ANO"),
 
-            # 9. Crear evento
+                    "month": record.get("MES"),
+
+                    "day": record.get("DIA"),
+
+                    "hour": latest_hour,
+
+                    "timestamp":
+                        latest_datetime.isoformat(),
+
+                    "measurements": {}
+                }
+
+            # Añadir magnitud
+            stations[station_code]["measurements"][
+                magnitude_name
+            ] = {
+
+                "magnitude_code":
+                    magnitude_code,
+
+                "value":
+                    value,
+
+                "validation":
+                    validation
+            }
+
+        return list(stations.values())
+
+    # ---------------------------------------------------------
+    # GENERAR EVENTOS INDIVIDUALES
+    # ---------------------------------------------------------
+
+    def generate_events(self):
+
+        snapshot = self.get_snapshot()
+
+        events = []
+
+        for station in snapshot:
+
             self.event_counter += 1
 
             event = {
@@ -208,50 +276,42 @@ class WeatherEventGenerator:
                 "weather_event_id":
                     self.event_counter,
 
-                # LOCALIZACIÓN
                 "province":
-                    "Madrid",
+                    station["province"],
 
                 "municipality":
-                    "Madrid",
+                    station["municipality"],
 
                 "station":
-                    station_code,
+                    station["station"],
 
                 "station_name":
-                    station_name,
+                    station["station_name"],
 
-                # FECHA Y HORA
+                "year":
+                    station["year"],
 
-                "year": record.get('ANO'),
-            
-                "month":record.get('MES'),
-                
-                "day" : record.get('DIA'),
+                "month":
+                    station["month"],
+
+                "day":
+                    station["day"],
 
                 "hour":
-                    latest_hour,
+                    station["hour"],
 
-                # MAGNITUD
-                "magnitude_code":
-                    magnitude_code,
+                "timestamp":
+                    station["timestamp"],
 
-                "magnitude":
-                    magnitude_name,
-
-                # VALOR
-                "value":
-                    value,
-
-                "validation":
-                    validation
+                "measurements":
+                    station["measurements"]
             }
-            print(event)
+
             events.append(event)
 
-
-        # 10. Mostrar resultado
-        print(f"Eventos generados: {len(events)}")
-
+        print(
+            f"Eventos Weather generados: "
+            f"{len(events)}"
+        )
 
         return events

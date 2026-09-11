@@ -1,7 +1,8 @@
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 import json
 import pandas as pd
 import time
+from collections import Counter
 
 from src.generator.address_generator import AddressGenerator
 from src.generator.drivers_generator import DriverGenerator
@@ -15,156 +16,198 @@ from src.generator.incident_historical_generator import (
 )
 
 from src.generator.weather_event import WeatherEventGenerator
+
 from src.apis.weather_api import WeatherApi
 from src.apis.traffic_api import TrafficApi
 
-from src.config.setup import DATA_ADDRESS
-from src.config.setup import *
-from src.simulator.azure_storage import write_file
+from src.kafka.producer import KafkaProducer
+
+from src.onelake_client import OnelakeClient
+
+from src.setup import *
+
+
+
 
 class Simulator:
 
+    SPAIN_FILE="data/reference/spain.csv"
+    MADRID_FILE="data/reference/213605-4-callejero-oficial-madrid-csv.csv"
+
     def __init__(self, fecha_actual):
 
-        
-        # DATOS
-        
-
-        self.drivers = None
-        self.orders = None
-        self.routes = None
-        self.historical_orders = None
-
-        
-        # EVENTOS
-        
-
-        self.gps_events = []
-        self.order_events = []
-        self.incidents = []
-
-        
-        # HISTÓRICO DE INCIDENCIAS
-        
-
-        self.historical_incidents = []
-
-        
-        # DATOS REALES
-        
-
-        self.traffic = None
-        self.weather = None
-
-        
-        # HORA DE SIMULACIÓN
-        
+        # ========================================================
+        # FECHA DE SIMULACIÓN
+        # ========================================================
 
         self.fecha_actual = fecha_actual
 
-        
-        # GENERADORES DE EVENTOS
-        # Se crean una sola vez para mantener su estado
-        
+        # ========================================================
+        # ONELAKE
+        # ========================================================
+
+        self.client_onelk = OnelakeClient()
+
+        # ========================================================
+        # KAFKA
+        # ========================================================
+
+        self.kproducer = KafkaProducer()
+
+        self.kproducer.create_topics()
+
+        # ========================================================
+        # DATOS BASE
+        # ========================================================
+
+        self.drivers = None
+
+        self.orders = None
+
+        self.routes = None
+
+        self.historical_orders = None
+
+        # ========================================================
+        # EVENTOS
+        # ========================================================
+
+        self.gps_events = []
+
+        self.order_events = []
+
+        self.incidents = []
+
+        self.historical_incidents = []
+
+        # ========================================================
+        # WEATHER
+        # ========================================================
+
+        self.weather = []
+
+        self.weather_generator = None
+
+        self.weather_event_counter = 0
+
+        self.last_weather_event = None
+
+        # ========================================================
+        # TRAFFIC
+        # ========================================================
+
+        self.traffic = []
+
+        self.traffic_api = None
+
+        self.traffic_event_counter = 0
+
+        self.last_traffic_event = None
+
+        # ========================================================
+        # GENERADORES
+        # ========================================================
 
         self.order_event_generator = None
+
         self.gps_event_generator = None
 
-    
-    # GENERAR DATOS INICIALES
+    # ============================================================
+    # DATOS INICIALES
+    # ============================================================
 
     def generate_initial_data(self):
 
-        
-        # 1. DIRECCIONES
-        
-        spain_path = DATA_ADDRESS / "spain.csv"
-        madrid_path = DATA_ADDRESS / "213605-4-callejero-oficial-madrid-csv.csv"
-        
-        addresses = AddressGenerator(spain_path,madrid_path)
-                
-        address_spain = addresses.get_address_spain_df()
-    
-        address_madrid = addresses.get_address_madrid_df()
+        # ========================================================
+        # ADDRESSES
+        # ========================================================
+        #
+        # IMPORTANTE:
+        # Se mantiene la forma de trabajar con tu
+        # AddressGenerator.
+        #
+        # Sustituye SPAIN_FILE y MADRID_FILE únicamente si en tu
+        # setup.py tienen otro nombre.
+        # ========================================================
 
-        
-        # 2. REPARTIDORES
-        
+        address_generator = AddressGenerator(
+            self.SPAIN_FILE,
+            self.MADRID_FILE
+        )
+
+        addresses_spain = (
+            address_generator
+            .get_address_spain_df()
+        )
+
+        addresses_madrid = (
+            address_generator
+            .get_address_madrid_df()
+        )
+
+        # ========================================================
+        # DRIVERS
+        # ========================================================
 
         driver_generator = DriverGenerator(
             [],
-            address_madrid
+            addresses_madrid
         )
 
-        self.drivers = driver_generator.create_drivers(270)
+        self.drivers = (
+            driver_generator
+            .create_drivers(270)
+        )
 
-        
-        # 3. RUTAS
-        
+        # ========================================================
+        # ROUTES
+        # ========================================================
 
         route_generator = RouteGenerator(
-            drivers=self.drivers,
-            addresses=address_madrid,
-            fecha_actual=self.fecha_actual
+            self.drivers,
+            addresses_madrid,self.fecha_actual
         )
 
-        self.routes = route_generator.create_routes()
-
-        
-        # 4. HISTÓRICO DE PEDIDOS
-        
-
-        historical_generator = OrderHistoricalGenerator(
-            drivers=self.drivers,
-            address_madrid=address_madrid,
-            address_spain=address_spain,
-            fecha_actual=self.fecha_actual
+        self.routes = (
+            route_generator
+            .create_routes()
         )
+
+        # ========================================================
+        # HISTORICAL ORDERS
+        # ========================================================
+
+        historical_generator = OrderHistoricalGenerator(self.drivers, addresses_madrid, addresses_spain,self.fecha_actual)
 
         self.historical_orders = (
-            historical_generator.create_historical(
-                10000,
-                min_pending_today=100
-            )
+            historical_generator
+            .create_historical(6000)
         )
 
-        
-        # 5. HISTÓRICO DE INCIDENCIAS
-        
+        # ========================================================
+        # HISTORICAL INCIDENTS
+        # ========================================================
 
-        incident_historical_generator = (
-            IncidentHistoricalGenerator(
-                historical_orders=self.historical_orders
-            )
+        historical_incident_generator = (
+            IncidentHistoricalGenerator(self.historical_orders )
         )
 
         self.historical_incidents = (
-            incident_historical_generator
+            historical_incident_generator
             .create_historical_incidents()
         )
 
-        print(
-            f"Generadas "
-            f"{len(self.historical_incidents)} "
-            f"incidencias históricas."
-        )
+        # ========================================================
+        # ORDERS
+        # ========================================================
 
-        
-        # 6. PEDIDOS PARA LA SIMULACIÓN
-        
+        order_generator = OrderGenerator(self.historical_orders,self.fecha_actual)
 
-        order_generator = OrderGenerator(
-            historical_orders=self.historical_orders,
-            fecha_actual=self.fecha_actual
-        )
+        self.orders = order_generator.get_orders_for_today()
 
-        self.orders = (
-            order_generator.get_orders_for_today()
-        )
-
-        
-        # 7. GENERADOR DE ORDER EVENTS
-        
+        # ========================================================
+        # ORDER EVENTS
+        # ========================================================
 
         self.order_event_generator = OrderEvents(
             self.orders,
@@ -173,342 +216,56 @@ class Simulator:
             self.fecha_actual
         )
 
-        
-        # 8. GENERADOR DE GPS EVENTS
-        
+        # ========================================================
+        # GPS EVENTS
+        # ========================================================
 
         self.gps_event_generator = GPSEvents(
+            self.orders,
             self.drivers,
+            self.routes,
             self.fecha_actual
         )
 
-        
-        # 9. WEATHER
-        
+        # ========================================================
+        # WEATHER
+        # ========================================================
 
-        weather_generator = WeatherEventGenerator()
-
-        self.weather = (
-            weather_generator.generate_events()
+        self.weather_generator = (
+            WeatherEventGenerator(self.fecha_actual)
         )
 
-        
-        # 10. TRAFFIC
-        
+        self.weather = []
 
-        traffic_api = TrafficApi()
+        # ========================================================
+        # TRAFFIC
+        # ========================================================
 
-        self.traffic = traffic_api.get_info()
+        self.traffic_api = TrafficApi(self.fecha_actual)
 
-        return (
-            self.historical_orders,
-            self.orders,
-            self.drivers,
-            self.routes
-        )
+        self.traffic = []
 
-    # GENERAR ORDER EVENTS
-    def create_order_events(self):
+    # ============================================================
+    # AVANZAR TIEMPO
+    # ============================================================
 
-        if self.order_event_generator is None:
-
-            self.order_event_generator = OrderEvents(
-                self.orders,
-                self.drivers,
-                self.routes,
-                self.fecha_actual
-            )
-
-        events = (
-            self.order_event_generator
-            .generate_available_events()
-        )
-
-        self.order_events.extend(events)
-
-        # Recuperar incidencias
-        self.incidents = (
-            self.order_event_generator
-            .get_incidents()
-        )
-
-        return events
-
-
-    # GENERAR GPS EVENTS
-
-    def create_gps_events(self):
-
-        if self.gps_event_generator is None:
-
-            self.gps_event_generator = GPSEvents(
-                self.drivers,
-                self.fecha_actual
-            )
-
-        events = (
-            self.gps_event_generator
-            .generate_available_events()
-        )
-
-        self.gps_events.extend(events)
-
-        return events
-
-
-    # GENERAR Y GUARDAR EVENTOS DE SIMULACIÓN
-
-
-    def generate_simulation_events(self):
-
-        fecha = self.fecha_actual.strftime("%Y-%m-%d")
-        
-        hora= f"{self.fecha_actual.hour:02d}"
-        print(hora)
-
-        
-        # GENERAR
-        
-
-        self.order_events = self.create_order_events()
-
-        self.gps_events = self.create_gps_events()
-
-        
-        # RUTAS
-        
-
-        gps_events_path = (LANDING_ROOT/ "gps_events")
-
-        order_events_path = (LANDING_ROOT/ "order_events")
-
-        incident_events_path = (LANDING_ROOT/ "incidents_events")
-
-        
-        # DIRECTORIOS
-        
-
-        gps_events_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        order_events_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        incident_events_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        
-        # GPS EVENTS
-        
-
-        with open(
-            gps_events_path / "gps_events.json",
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                self.gps_events,
-                file,
-                ensure_ascii=False,
-                indent=4,
-                default=lambda obj: obj.isoformat()
-            )
-
-        
-        # ORDER EVENTS
-        
-
-        with open(
-            order_events_path / "order_events.json",
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                self.order_events,
-                file,
-                ensure_ascii=False,
-                indent=4,
-                default=lambda obj: obj.isoformat()
-            )
-
-        
-        # INCIDENTS
-        
-
-        with open(
-            incident_events_path / "incident_events.json",
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                [
-                    vars(incident)
-                    for incident in self.incidents
-                ],
-                file,
-                ensure_ascii=False,
-                indent=4,
-                default=lambda obj: obj.isoformat()
-            )
-
-        return (
-            self.order_events,
-            self.gps_events,
-            self.incidents
-        )
-
-
-    # GUARDAR DATOS INICIALES
-
-
-    def generate_files(self):
-        
-        # HISTÓRICO DE ORDERS
-        #
-        # Aquí NO aplanamos status_history.
-        # Se conserva para Silver.
-        
-
-        historical_records = []
-
-        for order in self.historical_orders:
-
-            record = vars(order).copy()
-
-            historical_records.append(record)
-
-        historical_df = pd.DataFrame(
-            historical_records
-        )
-
-        write_file(LANDING_HISTORICAL_ORDERS /"historical_orders.csv",historical_df)
-
-        
-        # ORDERS ACTUALES
-        orders_df = pd.DataFrame(
-            [
-                vars(order)
-                for order in self.orders
-            ]
-        )
-
-        write_file( LANDING_ORDERS /"orders.xlsx",orders_df)
-
-        
-        # DRIVERS
-        drivers_df = pd.DataFrame(
-            [
-                vars(driver)
-                for driver in self.drivers
-            ]
-        )
-
-        write_file(LANDING_DRIVERS / "drivers.parquet",drivers_df)
-
-        
-        # ROUTES
-        
-
-        routes_df = pd.DataFrame(
-            [
-                vars(route)
-                for route in self.routes
-            ]
-        )
-
-        write_file(LANDING_ROUTES /"routes.json",routes_df)
-
-
-        
-        # HISTÓRICO DE INCIDENCIAS
-        historical_incidents_df = pd.DataFrame([
-                vars(incident)
-                for incident
-                in self.historical_incidents
-            ])
-
-        write_file(LANDING_HISTORICAL_INCIDENTS/"historical_incidents.json",historical_incidents_df)
-
-
-    # DATOS REALES
-    def generate_real_data_files(self):
-
-        fecha = self.fecha_actual.strftime("%Y-%m-%d")
-
-        weather_path = (
-            LANDING_ROOT
-            / "weather_events"
-            / fecha
-        )
-
-        traffic_path = (
-            LANDING_ROOT
-            / "traffic_events"
-            / fecha
-        )
-
-        weather_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        traffic_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        with open(
-                weather_path / "weather.json",
-                "w",
-                encoding="utf-8"
-            ) as file:
-
-            json.dump(
-                self.weather,
-                file,
-                ensure_ascii=False,
-                indent=4,
-                default=lambda obj: obj.isoformat()
-            )
-
-        with open(
-            traffic_path / "traffic.json",
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                self.traffic,
-                file,
-                ensure_ascii=False,
-                indent=4,
-                default=lambda obj: obj.isoformat()
-            )
-        return (
-            self.weather,
-            self.traffic
-        )
-
-
-    # AVANZAR TIEMPO DE SIMULACIÓN
-
-
-    def advance_time(self, minutes):
+    def advance_time(
+        self,
+        minutes
+    ):
 
         self.fecha_actual += timedelta(
             minutes=minutes
         )
 
-        # Actualizar la hora que utilizan los generadores
+        self.update_event_generators()
+
+    # ============================================================
+    # ACTUALIZAR GENERADORES
+    # ============================================================
+
+    def update_event_generators(self):
+
         if self.order_event_generator is not None:
 
             self.order_event_generator.fecha_actual = (
@@ -520,27 +277,658 @@ class Simulator:
             self.gps_event_generator.fecha_actual = (
                 self.fecha_actual
             )
-            
+
+    # ============================================================
+    # GENERAR EVENTOS DE SIMULACIÓN
+    # ============================================================
+
+    def generate_simulation_events(self):
+
+        order,incident= self.create_order_event()
+        
+
+        self.create_gps_events()
+
+        return (
+            self.order_events,
+            self.gps_events,
+            self.incidents
+        )
+
+    def update_order_status(self, order_id, new_status):
+
+        for order in self.orders:
+
+            if order.id_order == order_id:
+
+                order.status = new_status
+                order.status_modified_date = self.fecha_actual
+
+                print(
+                    f"Orden {order_id} actualizada: "
+                    f"status={new_status}"
+                )
+
+                return order
+
+        print(f"Orden {order_id} no encontrada.")
+        return None
+    
+# ============================================================
+# GUARDAR DATAFRAME
+# ============================================================
+
+    def write_file(self, path, dataframe):
+        """
+        Write a DataFrame using the format implied by its file extension.
+        """
+
+        path = str(path)
+
+        suffix = (
+            path
+            .rsplit(".", 1)[-1]
+            .lower()
+        )
+
+        # ---------------------------------------------------------
+        # PARQUET
+        # ---------------------------------------------------------
+
+        if suffix == "parquet":
+
+            dataframe = dataframe.copy()
+
+            # -----------------------------------------------------
+            # LOCATION -> LATITUDE / LONGITUDE
+            #
+            # Location es un objeto Python y PyArrow no puede
+            # serializarlo directamente.
+            # -----------------------------------------------------
+
+            if "location" in dataframe.columns:
+
+                dataframe["latitude"] = (
+                    dataframe["location"]
+                    .apply(
+                        lambda location:
+                        float(location.latitude)
+                        if location is not None
+                        else None
+                    )
+                )
+
+                dataframe["longitude"] = (
+                    dataframe["location"]
+                    .apply(
+                        lambda location:
+                        float(location.longitude)
+                        if location is not None
+                        else None
+                    )
+                )
+
+                # Eliminamos el objeto Location porque no puede
+                # ser almacenado directamente por PyArrow.
+                dataframe = dataframe.drop(
+                    columns=["location"]
+                )
+
+            dataframe.to_parquet(
+                path,
+                index=False
+            )
+
+        # ---------------------------------------------------------
+        # CSV
+        # ---------------------------------------------------------
+
+        elif suffix == "csv":
+
+            dataframe.to_csv(
+                path,
+                index=False
+            )
+
+        # ---------------------------------------------------------
+        # XLSX
+        # ---------------------------------------------------------
+
+        elif suffix == "xlsx":
+
+            dataframe.to_excel(
+                path,
+                index=False
+            )
+
+        # ---------------------------------------------------------
+        # JSON
+        # ---------------------------------------------------------
+
+        elif suffix == "json":
+
+            dataframe.to_json(
+                path,
+                orient="records",
+                force_ascii=False,
+                indent=4,
+                date_format="iso"
+            )
+
+        else:
+
+            raise ValueError(
+                f"Unsupported file format: {suffix}"
+            )
+    # ============================================================
+    # GUARDAR DATOS INICIALES
+    # ============================================================
+
+    def generate_files(self):
+
+        # ========================================================
+        # HISTÓRICO DE ORDERS
+        # ========================================================
+
+        historical_records = []
+
+        for order in self.historical_orders:
+
+            record = vars(order).copy()
+
+            historical_records.append(
+                record
+            )
+
+        historical_df = pd.DataFrame(
+            historical_records
+        )
+
+        historical_orders_file = (
+            f"{GENERATED_HISTORICAL_ORDERS}/"
+            "historical_orders.csv"
+        )
+
+        self.write_file(
+            historical_orders_file,
+            historical_df
+        )
+
+        # SUBIR A ONELAKE
+
+        self.client_onelk.load_file(
+            LANDING_HISTORICAL_ORDERS,
+            historical_orders_file
+        )
+
+        # ========================================================
+        # ORDERS ACTUALES
+        # ========================================================
+
+        orders_df = pd.DataFrame(
+            [
+                vars(order)
+                for order in self.orders
+            ]
+        )
+
+        orders_file = (
+            f"{GENERATED_ORDERS}/orders.xlsx"
+        )
+
+        self.write_file(
+            orders_file,
+            orders_df
+        )
+
+        # SUBIR A ONELAKE
+
+        self.client_onelk.load_file(
+            LANDING_ORDERS,
+            orders_file
+        )
+
+        # ========================================================
+        # DRIVERS
+        # ========================================================
+
+        drivers_df = pd.DataFrame(
+            [
+                vars(driver)
+                for driver in self.drivers
+            ]
+        )
+
+        drivers_file = (
+            f"{GENERATED_DRIVERS}/drivers.parquet"
+        )
+
+        self.write_file(
+            drivers_file,
+            drivers_df
+        )
+
+        # SUBIR A ONELAKE
+
+        self.client_onelk.load_file(
+            LANDING_DRIVERS,
+            drivers_file
+        )
+
+        # ========================================================
+        # ROUTES
+        # ========================================================
+
+        routes_df = pd.DataFrame(
+            [
+                vars(route)
+                for route in self.routes
+            ]
+        )
+
+        routes_file = (
+            f"{GENERATED_ROUTES}/routes.json"
+        )
+
+        self.write_file(
+            routes_file,
+            routes_df
+        )
+
+        # SUBIR A ONELAKE
+
+        self.client_onelk.load_file(
+            LANDING_ROUTES,
+            routes_file
+        )
+
+        # ========================================================
+        # HISTÓRICO DE INCIDENCIAS
+        # ========================================================
+
+        historical_incidents_df = pd.DataFrame(
+            [
+                vars(incident)
+                for incident in self.historical_incidents
+            ]
+        )
+
+        historical_incidents_file = (
+            f"{GENERATED_HISTORICAL_INCIDENTS}/"
+            "historical_incidents.json"
+        )
+
+        self.write_file(
+            historical_incidents_file,
+            historical_incidents_df
+        )
+
+        # SUBIR A ONELAKE
+
+        self.client_onelk.load_file(
+            LANDING_HISTORICAL_INCIDENTS,
+            historical_incidents_file
+        )
+        
+    # ============================================================
+    # ORDER EVENT
+    # ============================================================
+    def create_order_event(self):
+
+        result = (
+            self.order_event_generator
+            .generate_event()
+        )
+
+        # ========================================================
+        # NO HAY EVENTO
+        # ========================================================
+
+        if result is None:
+            return None, None
+
+        order_event = result["order_event"]
+        incident = result["incident"]
+
+        # ========================================================
+        # ORDER EVENT
+        # ========================================================
+
+        if order_event is not None:
+
+            self.order_events.append(
+                order_event
+            )
+
+            self.produce_event(
+                "order-events",
+                order_event,
+                "id_event"
+            )
+
+        # ========================================================
+        # INCIDENT EVENT
+        # ========================================================
+
+        if incident is not None:
+
+            self.incidents.append(
+                incident
+            )
+
+            incident_event = {
+                "id_incident": incident.id_incident,
+                "id_order": incident.id_order,
+                "id_driver": incident.id_driver,
+                "incident_date": incident.incident_date,
+                "incident_reason": incident.incident_reason,
+                "observations": incident.observations,
+                "resolved": incident.resolved,
+                "resolution_date": incident.resolution_date,
+                "resolution_action": incident.resolution_action
+            }
+
+            self.produce_event(
+                "incident-events",
+                incident_event,
+                "id_incident"
+            )
+
+        # ========================================================
+        # SIEMPRE DEVOLVEMOS DOS VALORES
+        # ========================================================
+
+        return order_event, incident
+
+
+    # ============================================================
+    # GPS
+    # ============================================================
+    def create_gps_events(self):
+
+        gps_events = (
+            self.gps_event_generator.generate_event()
+        )
+
+        print(
+            f"[GPS] Eventos generados: "
+            f"{len(gps_events) if gps_events else 0}"
+        )
+
+        if not gps_events:
+            return
+
+        for key, gps_event in gps_events:
+
+            print(
+                f"[GPS] Publicando evento: {gps_event}"
+            )
+
+            self.produce_event(
+                "gps-events",
+                gps_event,
+                "gps_event_id"
+            )
+
+
+    # ============================================================
+    # WEATHER
+    # ============================================================
+
+    def generate_weather_event(self):
+
+        self.weather = (
+            self.weather_generator
+            .generate_events()
+        )
+
+        self.weather_event_counter += 1
+
+        weather_event = {
+
+            "weather_event_id":
+                self.weather_event_counter,
+
+            "timestamp":
+                self.fecha_actual.isoformat(),
+
+            "measurements":
+                self.weather
+        }
+
+        self.last_weather_event = (
+            weather_event
+        )
+
+        self.produce_event(
+            "weather-events",
+            weather_event,
+            "weather_event_id"
+        )
+
+        return weather_event
+
+    # ============================================================
+    # TRAFFIC
+    # ============================================================
+
+    def generate_traffic_event(self):
+
+        self.traffic = (
+            self.traffic_api
+            .get_info()
+        )
+
+        self.traffic_event_counter += 1
+
+        traffic_event = {
+
+            "traffic_event_id":
+                self.traffic_event_counter,
+
+            "timestamp":
+                self.fecha_actual.isoformat(),
+
+            "measurements":
+                self.traffic
+        }
+
+        self.last_traffic_event = (
+            traffic_event
+        )
+
+        self.produce_event(
+            "traffic-events",
+            traffic_event,
+            "traffic_event_id"
+        )
+
+        return traffic_event
+
+    # ============================================================
+    # KAFKA
+    # ============================================================
+
+    def produce_event(
+        self,
+        topic,
+        event,
+        key_field
+    ):
+
+        if event is None:
+
+            return
+
+        # ========================================================
+        # INGESTION TIME
+        # ========================================================
+        print("EVENT:", event)
+        print("TYPE:", type(event))
+        event["ingestion_time"] = self.fecha_actual.isoformat()
+        
+
+        # ========================================================
+        # KEY
+        # ========================================================
+
+        key_event = str(
+            event[key_field]
+        )
+
+        # ========================================================
+        # JSON
+        # ========================================================
+
+        value_event = json.dumps(
+            event,
+            default=str
+        )
+
+        # ========================================================
+        # DEBUG SIZE
+        # ========================================================
+
+        size_mb = (
+            len(
+                value_event.encode(
+                    "utf-8"
+                )
+            )
+            /
+            (1024 * 1024)
+        )
+
+        print(
+            f"[Kafka] topic={topic} "
+            f"key={key_event} "
+            f"size={size_mb:.2f} MB"
+        )
+
+        # ========================================================
+        # PRODUCIR
+        # ========================================================
+
+        self.kproducer.produce(
+            topic,
+            key_event,
+            value_event
+        )
+
+    
+    # ============================================================
+    # GUARDAR DATOS REALES
+    # ============================================================
+
+    def generate_real_data_files(self):
+
+        fecha = (
+            self.fecha_actual
+            .strftime("%Y-%m-%d")
+        )
+
+        # ========================================================
+        # WEATHER
+        # ========================================================
+
+        if self.last_weather_event is not None:
+
+            weather_path = (
+                DATA_GENERATED
+                /
+                "weather_events"
+                /
+                fecha
+            )
+
+            weather_path.mkdir(
+                parents=True,
+                exist_ok=True
+            )
+
+            with open(
+                weather_path / "weather.json",
+                "w",
+                encoding="utf-8"
+            ) as file:
+
+                json.dump(
+                    self.last_weather_event,
+                    file,
+                    ensure_ascii=False,
+                    indent=4,
+                    default=str
+                )
+
+        # ========================================================
+        # TRAFFIC
+        # ========================================================
+
+        if self.last_traffic_event is not None:
+
+            traffic_path = (
+                DATA_GENERATED
+                /
+                "traffic_events"
+                /
+                fecha
+            )
+
+            traffic_path.mkdir(
+                parents=True,
+                exist_ok=True
+            )
+
+            with open(
+                traffic_path / "traffic.json",
+                "w",
+                encoding="utf-8"
+            ) as file:
+
+                json.dump(
+                    self.last_traffic_event,
+                    file,
+                    ensure_ascii=False,
+                    indent=4,
+                    default=str
+                )
+
+        return (
+            self.last_weather_event,
+            self.last_traffic_event
+        )
+
+    # ============================================================
+    # RUN
+    # ============================================================
+
     def run(self):
 
-        # =========================================
-        # DATOS INICIALES
-        # =========================================
+        # ========================================================
+        # 1. DATOS INICIALES
+        # ========================================================
 
         self.generate_initial_data()
 
         self.generate_files()
 
-        # =========================================
-        # SIMULACIÓN
-        # =========================================
+        # ========================================================
+        # 2. HORA FINAL
+        # ========================================================
 
-        end_time = self.fecha_actual.replace(
-            hour=22,
-            minute=0,
-            second=0,
-            microsecond=0
+        end_time = (
+            self.fecha_actual
+            .replace(
+                hour=22,
+                minute=0,
+                second=0,
+                microsecond=0
+            )
         )
+
+        # ========================================================
+        # 3. SIMULACIÓN
+        # ========================================================
 
         while self.fecha_actual <= end_time:
 
@@ -549,15 +937,38 @@ class Simulator:
                 f"{self.fecha_actual.strftime('%Y-%m-%d %H:%M')}"
             )
 
+            # ----------------------------------------------------
+            # PEDIDOS + GPS
+            # ----------------------------------------------------
+
             self.generate_simulation_events()
+
+            # ----------------------------------------------------
+            # WEATHER
+            # ----------------------------------------------------
+
+            self.generate_weather_event()
+
+            # ----------------------------------------------------
+            # TRAFFIC
+            # ----------------------------------------------------
+
+            #self.generate_traffic_event()
+
+            # ----------------------------------------------------
+            # ESPERAR
+            # ----------------------------------------------------
+
             time.sleep(60)
-            
+
+            # ----------------------------------------------------
+            # AVANZAR 60 MINUTOS
+            # ----------------------------------------------------
+
             self.advance_time(60)
 
-        # =========================================
-        # DATOS REALES
-        # =========================================
+    
 
-        self.generate_real_data_files()
-
-        print("Simulación finalizada.")
+        print(
+            "Simulación finalizada."
+        )

@@ -9,10 +9,6 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
-# Generated data
-data/simulated/
-data/historical/
-lakehouse/
 
 # IDE
 .vscode/
@@ -21,5 +17,3 @@ lakehouse/
 .DS_Store
 Thumbs.db
 
-# .ENV
-.env

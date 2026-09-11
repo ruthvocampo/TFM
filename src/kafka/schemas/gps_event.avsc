@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "GPSEvent",
+  "namespace": "tfm.kafka",
+  "fields": [
+    {
+      "name": "id_event",
+      "type": "int"
+    },
+    {
+      "name": "id_driver",
+      "type": "string"
+    },
+    {
+      "name": "latitude",
+      "type": "double"
+    },
+    {
+      "name": "longitude",
+      "type": "double"
+    },
+    {
+      "name": "timestamp",
+      "type": "string"
+    },
+    {
+      "name": "ingestion_time",
+      "type": "string"
+    }
+  ]
+}

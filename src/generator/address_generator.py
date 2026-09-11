@@ -109,7 +109,7 @@ MADRID_ZONAS = {
         "nombre": "Latina",
         "barrios": {
             "1": "Los Cármenes",
-            "2": "Puerta del Ángel",
+            "2": "LETRA del Ángel",
             "3": "Lucero",
             "4": "Aluche",
             "5": "Campamento",
@@ -124,7 +124,7 @@ MADRID_ZONAS = {
             "2": "Opañel",
             "3": "San Isidro",
             "4": "Vista Alegre",
-            "5": "Puerta Bonita",
+            "5": "LETRA Bonita",
             "6": "Buenavista",
             "7": "Abrantes",
         },
@@ -243,7 +243,7 @@ MADRID_ZONAS = {
 
 class AddressGenerator:
 
-    def __init__(self, spain_file, madrid_file, repetitions=50):
+    def __init__(self, spain_file, madrid_file):
 
         self.spain_df = pd.read_csv(
             spain_file,
@@ -272,7 +272,6 @@ class AddressGenerator:
             dtype=str,
         )
 
-        self.repetitions = repetitions
 
     def get_address_spain_df(self):
 
@@ -292,7 +291,7 @@ class AddressGenerator:
         ]
 
         df["PLANTA"] = None
-        df["PUERTA"] = None
+        df["LETRA"] = None
 
         mask = df["TIPO_NDP"] == "PORTAL"
 
@@ -301,7 +300,7 @@ class AddressGenerator:
             for _ in range(mask.sum())
         ]
 
-        df.loc[mask, "PUERTA"] = [
+        df.loc[mask, "LETRA"] = [
             random.choice(["A", "B", "C", "D", "E", "F"])
             for _ in range(mask.sum())
         ]
@@ -399,11 +398,11 @@ class AddressGenerator:
         ]
 
         # ----------------------------------------------
-        # Planta y puerta
+        # Planta y LETRA
         # ----------------------------------------------
 
         df["PLANTA"] = None
-        df["PUERTA"] = None
+        df["LETRA"] = None
 
         mask = df["TIPO_NDP"] == "PORTAL"
 
@@ -412,7 +411,7 @@ class AddressGenerator:
             for _ in range(mask.sum())
         ]
 
-        df.loc[mask, "PUERTA"] = [
+        df.loc[mask, "LETRA"] = [
             random.choice(
                 ["A", "B", "C", "D", "E", "F"]
             )
@@ -459,16 +458,11 @@ class AddressGenerator:
         df["latitude"] = df["LATITUD"]
         df["longitude"] = df["LONGITUD"]
 
-        # ----------------------------------------------
-        # Muestreo
-        # ----------------------------------------------
+       
 
-        if len(df) > self.repetitions:
-            df = df.sample(
-                n=self.repetitions
-            ).reset_index(drop=True)
+   
 
-        return df
+        return df.reset_index(drop=True)
 
     @staticmethod
     def coordenada_dms_a_decimal(valor):

@@ -1813,7 +1813,7 @@ class Simulator:
     # =========================================================
 
     def generate_files(self):
-
+        str_fecha = self.fecha_actual.strftime("%Y-%m-%d")
         # -----------------------------------------------------
         # HISTORICAL ORDERS
         # -----------------------------------------------------
@@ -1839,7 +1839,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_HISTORICAL_ORDERS,
+            LANDING_HISTORICAL_ORDERS+  f"/{str_fecha}",
             historical_orders_file
         )
 
@@ -1866,7 +1866,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_ORDERS,
+            LANDING_ORDERS+  f"/{str_fecha}",
             orders_file
         )
 
@@ -1893,7 +1893,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_DRIVERS,
+            LANDING_DRIVERS+  f"/{str_fecha}",
             drivers_file
         )
 
@@ -1920,7 +1920,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_ROUTES,
+            LANDING_ROUTES+  f"/{str_fecha}",
             routes_file
         )
 
@@ -1949,7 +1949,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_HISTORICAL_INCIDENTS,
+            LANDING_HISTORICAL_INCIDENTS+  f"/{str_fecha}",
             historical_incidents_file
         )
 
@@ -2040,7 +2040,9 @@ class Simulator:
             self.generate_initial_data()
             self.generate_files()
             self.save_state()
-
+        
+        print(f"FECHA ACTUAL" f"{self.fecha_actual.strftime('%Y-%m-%d')}")
+        
         for step in range(steps):
 
             print()
@@ -2051,15 +2053,18 @@ class Simulator:
                 f"{self.fecha_actual.strftime('%Y-%m-%d %H:%M')}"
             )
             print("=" * 70)
-
+            hora = self.fecha_actual.hour
+            if hora==6:
+                print("[BATCH] Son las 06:00. Generando archivos...")
+                # Archivos
+                self.generate_files()
+                    
             # Eventos de la hora actual
             self.create_order_event()
             self.create_gps_events()
             self.generate_weather_event()
             self.generate_traffic_event()
 
-            # Archivos
-            self.generate_files()
             self.generate_real_data_files()
 
             # Avanzar reloj

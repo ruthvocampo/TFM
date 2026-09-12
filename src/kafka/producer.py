@@ -166,26 +166,39 @@ class KafkaProducer:
     # PRODUCE
     # =============================================================
 
+    def delivery_report(self,err, msg):
+        if err is not None:
+            print(f"[KAFKA ERROR] {err}")
+        else:
+            print(
+                f"[KAFKA OK] topic={msg.topic()} "
+                f"partition={msg.partition()} "
+                f"offset={msg.offset()}"
+            )
+
+
     def produce(self, topic, key, value):
-
+        print(f"[PRODUCE] topic={topic}")
         serializer = self.serializers[topic]
+        context = SerializationContext(topic, MessageField.VALUE)
 
-        context = SerializationContext(
-            topic,
-            MessageField.VALUE
-        )
-
-        serialized_value = serializer(
-            value,
-            context
+        serialized_value = serializer(value, context)
+        
+        print(
+            f"[AVRO] topic={topic} "
+            f"size={len(serialized_value)} "
+            f"header={serialized_value[:10].hex()}"
         )
 
         self.producer.produce(
             topic=topic,
             key=str(key),
-            value=serialized_value
+            value=serialized_value,
+            callback=self.delivery_report
         )
 
+        # Permite que confluent-kafka procese entregas
+        self.producer.poll(0)
     # =============================================================
     # FLUSH
     # =============================================================

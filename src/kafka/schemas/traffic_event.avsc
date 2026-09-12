@@ -20,7 +20,8 @@
     },
     {
       "name": "accesoAsociado",
-      "type": "string"
+      "type": ["null", "string"],
+      "default": null
     },
     {
       "name": "intensidad",
@@ -49,7 +50,8 @@
     },
     {
       "name": "subarea",
-      "type": "string"
+      "type": ["null", "string"],
+      "default": null
     },
     {
       "name": "st_x",

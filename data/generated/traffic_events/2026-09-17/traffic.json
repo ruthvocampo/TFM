@@ -1,0 +1,15 @@
+{
+    "fecha_hora": "2026-09-17 23:00:00",
+    "idelem": "11384",
+    "descripcion": "PM13185v",
+    "accesoAsociado": null,
+    "intensidad": 900,
+    "ocupacion": 7,
+    "carga": 105,
+    "nivelServicio": 0,
+    "intensidadSat": null,
+    "error": "N",
+    "subarea": null,
+    "st_x": 442429.962273676,
+    "st_y": 4481648.63720197
+}

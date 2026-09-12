@@ -26,6 +26,8 @@ class TrafficApi:
         fecha_hora_api = root.findtext("fecha_hora")
 
         records = []
+        
+
 
         for pm in root.findall("pm"):
 
@@ -41,7 +43,11 @@ class TrafficApi:
             "ocupacion": int(pm.findtext("ocupacion")),
             "carga": int(pm.findtext("carga")),
             "nivelServicio": int(pm.findtext("nivelServicio")),
-            "intensidadSat": int(pm.findtext("intensidadSat")),
+            "intensidadSat": (
+                None
+                if pm.findtext("intensidadSat") is None
+                else int(pm.findtext("intensidadSat"))
+            ),
 
             "error": pm.findtext("error"),
 
@@ -57,11 +63,11 @@ class TrafficApi:
 
     @staticmethod
     def _to_float(value):
-
+        print(value)
         if value is None:
             return None
 
         try:
-            return float(value)
+            return float(value.replace(",", "."))
         except (ValueError, TypeError):
             return None

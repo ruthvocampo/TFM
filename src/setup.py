@@ -40,7 +40,7 @@ GENERATED_HISTORICAL_INCIDENTS = f"{DATA_GENERATED}/historical_incidents"
 # CONFIGURACIÓN ONE LAKE 
 
 WORKSPACE = "TFM_Logistic"
-LAKEHOUSE_ROOT = "logistics_lakehouse.Lakehouse/Files"
+LAKEHOUSE_ROOT = "LH_Landing.lakehouse/Files"
 
 # LANDING
 LANDING_ROOT = f"{LAKEHOUSE_ROOT}/landing"

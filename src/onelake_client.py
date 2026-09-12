@@ -17,6 +17,12 @@ class OnelakeClient():
         # Convertimos a PATH
         local_file = Path(dir_file_to_load)
         local_name= local_file.name
+        print()
+        print("=" * 70)
+        print("[ONELAKE] SUBIDA")
+        print(f"[ONELAKE] Workspace: {WORKSPACE}")
+        print(f"[ONELAKE] Carpeta:   {load_to_folder}")
+        print(f"[ONELAKE] Fichero:   {local_name}")
         # ACCESO AL LAKEHOUSE
         self.directory_client = self.filesystem_client.get_directory_client(load_to_folder)
         file_client = self.directory_client.get_file_client(local_name)

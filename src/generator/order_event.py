@@ -1,3 +1,4 @@
+import random
 import pandas as pd
 
 from src.generator.incident_generator import (
@@ -28,37 +29,109 @@ class OrderEvents:
 
         self.incidents = []
 
+    def id_event(self):
+
+        self.event_counter += 1
+
+        return self.event_counter
+    
     # =========================================================
     # GENERAR EVENTO
     # =========================================================
+    def generate_event(self, max_orders_per_driver=8):
 
-    def generate_event(self):
+        results = []
+
+        # ==========================================================
+        # 1. PRIMERO: PEDIDOS QUE NECESITAN ASIGNACIÓN
+        # ==========================================================
 
         for order in self.orders:
 
             if self.is_final_status(order):
                 continue
 
-            next_status = (
-                self.choose_available_next_status(
-                    order
-                )
-            )
+            next_status = self.choose_available_next_status(order)
 
             if next_status is None:
                 continue
 
-            event = self.generate_event_for_order(
+            # Si necesita asignar conductor, intentamos asignarlo
+            if next_status in [
+                "ASIGNADO RECOGIDA",
+                "ASIGNADO ENTREGA"
+            ]:
+
+                driver_id = self.find_driver_for_order(order)
+
+                if driver_id is None:
+                    continue
+
+            result = self.generate_event_for_order(
                 order,
                 next_status
             )
 
-            if event is not None:
+            if result is None:
+                continue
 
-                return event
+            results.append(result)
 
-        return None
+        # ==========================================================
+        # 2. AGRUPAR LOS PEDIDOS POR DRIVER
+        # ==========================================================
 
+        orders_by_driver = {}
+
+        for order in self.orders:
+
+            if self.is_final_status(order):
+                continue
+
+            driver_id = getattr(order, "id_driver", None)
+
+            if driver_id is None:
+                continue
+
+            if driver_id not in orders_by_driver:
+                orders_by_driver[driver_id] = []
+
+            orders_by_driver[driver_id].append(order)
+
+        # ==========================================================
+        # 3. CADA DRIVER AVANZA HASTA 8 PEDIDOS
+        # ==========================================================
+
+        for driver_id, driver_orders in orders_by_driver.items():
+
+            processed = 0
+
+            for order in driver_orders:
+
+                if processed >= max_orders_per_driver:
+                    break
+
+                if self.is_final_status(order):
+                    continue
+
+                next_status = self.choose_available_next_status(order)
+
+                if next_status is None:
+                    continue
+
+                result = self.generate_event_for_order(
+                    order,
+                    next_status
+                )
+
+                if result is None:
+                    continue
+
+                results.append(result)
+
+                processed += 1
+
+        return results
     # =========================================================
     # ESTADOS FINALES
     # =========================================================
@@ -82,249 +155,212 @@ class OrderEvents:
 
         return False
 
-    # =========================================================
-    # CREAR EVENTO
-    # =========================================================
+    def resolve_last_incident(self, order):
 
-    def generate_event_for_order(
-        self,
-        order,
-        next_status
-    ):
+        for incident in reversed(self.incidents):
+
+            if incident.id_order == order.id_order:
+
+                incident.resolved = True
+                incident.resolution_date = self.fecha_actual
+                incident.resolution_action = "Pedido reasignado"
+
+                return incident
+
+        return None
+    
+    
+    def generate_delivery_completed_event(self, order):
+
+        if order.status != "EN REPARTO ENTREGA":
+            return None
 
         previous_status = order.status
 
-        timestamp = (
-            self._get_event_timestamp(
-                order,
-                next_status
-            )
-        )
-
-        incident = None
-
-        # -----------------------------------------------------
-        # ASIGNACIÓN
-        # -----------------------------------------------------
-
-        if next_status in [
-            "ASIGNADO RECOGIDA",
-            "ASIGNADO ENTREGA"
-        ]:
-
-            driver_id = (
-                self.find_driver_for_order(
-                    order
-                )
-            )
-
-            if driver_id is None:
-
-                print(
-                    f"{order.id_order}: "
-                    f"no se ha encontrado "
-                    f"un repartidor disponible"
-                )
-
-                return None
-
-            if next_status == "ASIGNADO RECOGIDA":
-
-                order.id_driver_pickup = (
-                    driver_id
-                )
-
-            elif next_status == "ASIGNADO ENTREGA":
-
-                order.id_driver_delivery = (
-                    driver_id
-                )
-
-            order.id_driver = driver_id
-
-        # -----------------------------------------------------
-        # INCIDENTE
-        # -----------------------------------------------------
-
-        if next_status == "INCIDENTADO":
-
-            previous_driver_id = (
-                order.id_driver
-            )
-
-            incident = (
-                self.incident_generator
-                .create_incident(
-                    order=order,
-                    incident_date=timestamp
-                )
-            )
-
-            incident.id_driver = (
-                previous_driver_id
-            )
-
-            self.incidents.append(
-                incident
-            )
-
-        # -----------------------------------------------------
-        # ACTUALIZAR PEDIDO
-        # -----------------------------------------------------
-
         order.set_status(
-            next_status,
-            timestamp
+            "ENTREGADO",
+            self.fecha_actual
         )
 
-        # -----------------------------------------------------
-        # RESOLVER INCIDENTE
-        # -----------------------------------------------------
-
-        if (
-            previous_status == "INCIDENTADO"
-            and
-            next_status == "ASIGNADO ENTREGA"
-        ):
-
-            order_incidents = [
-                incident_item
-                for incident_item in self.incidents
-                if incident_item.id_order
-                == order.id_order
-            ]
-
-            if order_incidents:
-
-                incident_to_resolve = (
-                    order_incidents[-1]
-                )
-
-                previous_driver_id = (
-                    incident_to_resolve.id_driver
-                )
-
-                order.id_driver = (
-                    previous_driver_id
-                )
-
-                order.id_driver_delivery = (
-                    previous_driver_id
-                )
-
-                incident_to_resolve.resolve(
-                    resolution_date=timestamp,
-                    resolution_action=(
-                        "REASIGNACIÓN AL MISMO REPARTIDOR"
-                    )
-                )
-
-        # -----------------------------------------------------
-        # ID EVENTO
-        # -----------------------------------------------------
-
-        self.event_counter += 1
-
-        order_event = {
-
-            "id_event": self.event_counter,
-
+        event = {
+            "id_event": self.id_event(),
             "id_order": order.id_order,
-
             "id_driver": order.id_driver,
-
-            "type_service": order.type_service,
-
+            "event_date": self.fecha_actual,
             "previous_status": previous_status,
-
-            "status": next_status,
-
-            "timestamp": timestamp
+            "type_service": order.type_service,
+            "status": "ENTREGADO",
+            "timestamp": int(self.fecha_actual.timestamp() * 1000)
         }
 
         return {
-            "order_event": order_event,
+            "order_event": event,
+            "incident": None
+        }
+    
+    
+    # =========================================================
+    # CREAR EVENTO
+    # =========================================================
+    def generate_event_for_order(self, order, next_status):
+
+        previous_status = order.status
+
+        # =========================================================
+        # ASIGNACIÓN DE RECOGIDA
+        # =========================================================
+
+        if next_status == "ASIGNADO RECOGIDA":
+
+            driver_id = self.find_driver_for_order(order)
+
+            if driver_id is None:
+                return None
+
+            order.id_driver = driver_id
+
+        # =========================================================
+        # ASIGNACIÓN DE ENTREGA
+        # =========================================================
+
+        elif next_status == "ASIGNADO ENTREGA":
+
+            driver_id = self.find_driver_for_order(order)
+
+            if driver_id is None:
+                return None
+
+            order.id_driver = driver_id
+
+        # =========================================================
+        # INCIDENCIA
+        # =========================================================
+
+        incident = None
+
+        if next_status == "INCIDENTADO":
+
+            incident = self.incident_generator.create_incident(
+                order,self.fecha_actual
+            )
+
+            if incident is None:
+                return None
+
+        # =========================================================
+        # CAMBIO DE ESTADO
+        # =========================================================
+
+        order.status = next_status
+
+        # =========================================================
+        # RESOLUCIÓN DE INCIDENCIA
+        # =========================================================
+
+        if (
+            previous_status == "INCIDENTADO"
+            and next_status == "ASIGNADO ENTREGA"
+        ):
+            self.resolve_last_incident(order)
+
+        # =========================================================
+        # EVENTO DE PEDIDO
+        # =========================================================
+
+        event = {
+            "id_event": self.id_event(),
+            "id_order": order.id_order,
+            "id_driver": order.id_driver,
+            "type_service": str(order.type_service),
+            "timestamp": int(self.fecha_actual.timestamp() * 1000),
+            "previous_status": previous_status,
+            "type_service": str(order.type_service),
+            "status": order.status
+        }
+
+        return {
+            "order_event": event,
             "incident": incident
         }
 
     # =========================================================
     # ESTADOS SIGUIENTES
     # =========================================================
-
-    def choose_available_next_status(
-        self,
-        order
-    ):
+    def choose_available_next_status(self, order):
 
         current_status = order.status
+        current_hour = self.fecha_actual.hour
+        current_minute = self.fecha_actual.minute
 
-        type_service = order.type_service
+        # ==========================================================
+        # HORA ACTUAL EN FORMATO DECIMAL
+        # Ejemplo:
+        # 07:00 -> 7.0
+        # 07:30 -> 7.5
+        # 08:00 -> 8.0
+        # ==========================================================
 
-        hora = self.fecha_actual.hour
+        current_time = current_hour + (current_minute / 60)
 
-        # =====================================================
+        # ==========================================================
         # RECOGIDA
-        # =====================================================
+        # ==========================================================
 
-        if type_service == "RECOGIDA":
+        if order.type_service == "RECOGIDA":
 
             if current_status == "CREADO":
+                return "PENDIENTE DE ASIGNACIÓN RECOGIDA"
 
-                return (
-                    "PENDIENTE DE ASIGNACIÓN RECOGIDA"
-                )
+            if current_status == "PENDIENTE DE ASIGNACIÓN RECOGIDA":
 
-            if (
-                current_status
-                == "PENDIENTE DE ASIGNACIÓN RECOGIDA"
-            ):
-
-                if 6 <= hora < 8:
-
+                # De 06:00 a 07:30 se asignan las recogidas
+                if 6 <= current_time < 7.5:
                     return "ASIGNADO RECOGIDA"
 
                 return None
 
             if current_status == "ASIGNADO RECOGIDA":
 
-                if 6 <= hora < 8:
-
+                # Desde las 07:30 empieza el reparto/recogida
+                if current_time >= 7.5:
                     return "EN REPARTO RECOGIDA"
 
                 return None
 
             if current_status == "EN REPARTO RECOGIDA":
 
-                if 8 <= hora <= 22:
-
+                # El pedido puede ser recogido durante la jornada
+                if 8 <= current_hour <= 22:
                     return "RECOGIDO"
 
                 return None
 
-            return None
+            if current_status == "RECOGIDO":
+                return None
 
-        # =====================================================
+        # ==========================================================
         # ENTREGA
-        # =====================================================
+        # ==========================================================
 
-        if type_service == "ENTREGA":
+        if order.type_service == "ENTREGA":
 
             if current_status == "CREADO":
+                return "PENDIENTE DE ASIGNACIÓN RECOGIDA"
 
-                return (
-                    "PENDIENTE DE ASIGNACIÓN RECOGIDA"
-                )
+            if current_status == "PENDIENTE DE ASIGNACIÓN RECOGIDA":
 
-            if (
-                current_status
-                == "PENDIENTE DE ASIGNACIÓN RECOGIDA"
-            ):
+                # La recogida se asigna durante la ventana 06:00-07:30
+                if 6 <= current_time < 7.5:
+                    return "ASIGNADO RECOGIDA"
 
-                return "ASIGNADO RECOGIDA"
+                return None
 
             if current_status == "ASIGNADO RECOGIDA":
 
-                return "EN REPARTO RECOGIDA"
+                if current_time >= 7.5:
+                    return "EN REPARTO RECOGIDA"
+
+                return None
 
             if current_status == "EN REPARTO RECOGIDA":
 
@@ -340,53 +376,50 @@ class OrderEvents:
 
             if current_status == "EN TRANSPORTE":
 
-                if 0 <= hora < 6:
-
+                # Llegada a nave durante la noche/madrugada
+                if 0 <= current_hour < 6:
                     return "LLEGADA A LA NAVE"
 
                 return None
 
             if current_status == "LLEGADA A LA NAVE":
 
-                return (
-                    "PENDIENTE DE ASIGNACIÓN ENTREGA"
-                )
+                return "PENDIENTE DE ASIGNACIÓN ENTREGA"
 
-            if (
-                current_status
-                == "PENDIENTE DE ASIGNACIÓN ENTREGA"
-            ):
+            if current_status == "PENDIENTE DE ASIGNACIÓN ENTREGA":
 
-                if 6 <= hora < 8:
-
+                # De 06:00 a 07:30 se asignan las entregas
+                if 6 <= current_time < 7.5:
                     return "ASIGNADO ENTREGA"
 
                 return None
 
             if current_status == "ASIGNADO ENTREGA":
 
-                if 6 <= hora < 8:
-
+                # Desde las 07:30 comienza el reparto
+                if current_time >= 7.5:
                     return "EN REPARTO ENTREGA"
 
                 return None
 
             if current_status == "EN REPARTO ENTREGA":
 
-                # GPS será el responsable de entregar.
+                # 10% de probabilidad de incidente
+                if random.random() < 0.10:
+                    return "INCIDENTADO"
+
                 return None
 
             if current_status == "INCIDENTADO":
 
-                if 6 <= hora <= 22:
-
+                # Una vez resuelto, vuelve a asignado
+                if current_time >= 7.5:
                     return "ASIGNADO ENTREGA"
 
                 return None
 
-            return None
-
         return None
+
 
     # =========================================================
     # NORMALIZACIÓN
@@ -601,24 +634,3 @@ class OrderEvents:
     def get_incidents(self):
 
         return self.incidents
-
-    # =========================================================
-    # GPS ENTREGA
-    # =========================================================
-
-    def mark_order_delivered_from_gps(
-        self,
-        order,
-        timestamp
-    ):
-
-        if order.status != "EN REPARTO ENTREGA":
-
-            return False
-
-        order.set_status(
-            "ENTREGADO",
-            timestamp
-        )
-
-        return True

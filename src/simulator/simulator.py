@@ -464,84 +464,79 @@ class Simulator:
     # =========================================================
     # ORDER EVENT
     # =========================================================
-
     def create_order_event(self):
 
-        result = (
-            self.order_event_generator
-            .generate_event()
+        results = self.order_event_generator.generate_event(
+            max_orders_per_driver=8
         )
 
-        if result is None:
+        if not results:
+            return [], []
 
-            return None, None
+        order_events = []
+        incidents = []
 
-        order_event = (
-            result["order_event"]
+        for result in results:
+
+            if result is None:
+                continue
+
+            order_event = result["order_event"]
+            incident = result["incident"]
+
+            # ======================================================
+            # ORDER EVENT
+            # ======================================================
+
+            if order_event is not None:
+
+                self.order_events.append(order_event)
+                order_events.append(order_event)
+
+                self.produce_event(
+                    "order-events",
+                    order_event,
+                    "id_event"
+                )
+
+            # ======================================================
+            # INCIDENT
+            # ======================================================
+
+            if incident is not None:
+
+                self.incidents.append(incident)
+                incidents.append(incident)
+
+                incident_event = {
+                    "id_incident": incident.id_incident,
+                    "id_order": incident.id_order,
+                    "id_driver": incident.id_driver,
+                    "incident_date": incident.incident_date,
+                    "incident_reason": incident.incident_reason,
+                    "observations": incident.observations,
+                    "resolved": incident.resolved,
+                    "resolution_date": incident.resolution_date,
+                    "resolution_action": incident.resolution_action
+                }
+
+                self.produce_event(
+                    "incident-events",
+                    incident_event,
+                    "id_incident"
+                )
+
+        print(
+            f"[ORDER] Eventos generados: "
+            f"{len(order_events)}"
         )
 
-        incident = (
-            result["incident"]
+        print(
+            f"[INCIDENT] Incidencias generadas: "
+            f"{len(incidents)}"
         )
 
-        if order_event is not None:
-
-            self.order_events.append(
-                order_event
-            )
-
-            self.produce_event(
-                "order-events",
-                order_event,
-                "id_event"
-            )
-
-        if incident is not None:
-
-            self.incidents.append(
-                incident
-            )
-
-            incident_event = {
-
-                "id_incident":
-                    incident.id_incident,
-
-                "id_order":
-                    incident.id_order,
-
-                "id_driver":
-                    incident.id_driver,
-
-                "incident_date":
-                    incident.incident_date,
-
-                "incident_reason":
-                    incident.incident_reason,
-
-                "observations":
-                    incident.observations,
-
-                "resolved":
-                    incident.resolved,
-
-                "resolution_date":
-                    incident.resolution_date,
-
-                "resolution_action":
-                    incident.resolution_action
-            }
-
-            self.produce_event(
-                "incident-events",
-                incident_event,
-                "id_incident"
-            )
-
-        return (
-            order_event,
-            incident
-        )
+        return order_events, incidents
 
     # =========================================================
     # GPS
@@ -549,10 +544,7 @@ class Simulator:
 
     def create_gps_events(self):
 
-        gps_events = (
-            self.gps_event_generator
-            .generate_event()
-        )
+        gps_events = self.gps_event_generator.generate_event()
 
         print(
             f"[GPS] Eventos generados: "
@@ -560,10 +552,11 @@ class Simulator:
         )
 
         if not gps_events:
+            return []
 
-            return
+        arrived_orders = []
 
-        for key, gps_event in gps_events:
+        for key, gps_event, orders_arrived in gps_events:
 
             self.gps_events.append(
                 gps_event
@@ -575,6 +568,13 @@ class Simulator:
                 "gps_event_id"
             )
 
+            if orders_arrived:
+
+                arrived_orders.extend(
+                    orders_arrived
+                )
+
+        return arrived_orders
     # =========================================================
     # WEATHER
     # =========================================================
@@ -1814,6 +1814,10 @@ class Simulator:
 
     def generate_files(self):
         str_fecha = self.fecha_actual.strftime("%Y-%m-%d")
+        
+        str_año = self.fecha_actual.strftime('%Y')
+        
+        str_mes = self.fecha_actual.strftime('%m')
         # -----------------------------------------------------
         # HISTORICAL ORDERS
         # -----------------------------------------------------
@@ -1839,7 +1843,7 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_HISTORICAL_ORDERS+  f"/{str_fecha}",
+            LANDING_HISTORICAL_ORDERS+  f"/{self.fecha_actual.strftime('%Y')}",
             historical_orders_file
         )
 
@@ -2023,7 +2027,33 @@ class Simulator:
             self.last_weather_event,
             self.last_traffic_event
         )
+    
+    def process_arrived_orders(self, arrived_orders):
 
+        if not arrived_orders:
+            return
+
+        for order in arrived_orders:
+
+            result = (self.order_event_generator.generate_delivery_completed_event(order))
+
+            if result is None:
+                continue
+
+            order_event = result["order_event"]
+
+            if order_event is not None:
+
+                self.order_events.append(
+                    order_event
+                )
+
+                self.produce_event(
+                    "order-events",
+                    order_event,
+                    "id_event"
+                )
+    
     # =========================================================
     # RUN
     # =========================================================
@@ -2061,9 +2091,12 @@ class Simulator:
                     
             # Eventos de la hora actual
             self.create_order_event()
-            self.create_gps_events()
-            self.generate_weather_event()
-            self.generate_traffic_event()
+            # GPS mueve al repartidor
+            arrived_orders = self.create_gps_events()
+            # Si llega al destino, se marca ENTREGADO
+            self.process_arrived_orders(arrived_orders)
+            #self.generate_weather_event()
+            #self.generate_traffic_event()
 
             self.generate_real_data_files()
 

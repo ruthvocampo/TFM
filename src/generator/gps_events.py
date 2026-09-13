@@ -23,6 +23,7 @@ class GPSEvents:
 
         self.event_counter = 0
 
+        # Estado de movimiento de cada conductor
         self.driver_state = {}
 
     # =========================================================
@@ -41,8 +42,7 @@ class GPSEvents:
 
     def timestamp(self):
 
-        return self.fecha_actual.isoformat()
-
+        return int(self.fecha_actual.timestamp() * 1000)
     # =========================================================
     # NORMALIZE
     # =========================================================
@@ -51,15 +51,11 @@ class GPSEvents:
     def normalize(value):
 
         if value is None:
-
             return ""
 
-        value = str(
-            value
-        ).strip().upper()
+        value = str(value).strip().upper()
 
         if value.endswith(".0"):
-
             value = value[:-2]
 
         return value
@@ -68,20 +64,14 @@ class GPSEvents:
     # ROUTES DRIVER
     # =========================================================
 
-    def get_routes_for_driver(
-        self,
-        driver_id
-    ):
+    def get_routes_for_driver(self, driver_id):
 
         return sorted(
-
             [
                 route
                 for route in self.routes
-
                 if route.id_driver == driver_id
             ],
-
             key=lambda route: route.priority
         )
 
@@ -89,16 +79,11 @@ class GPSEvents:
     # ORDERS ROUTE
     # =========================================================
 
-    def get_orders_for_route(
-        self,
-        route
-    ):
+    def get_orders_for_route(self, route):
 
         return [
-
             order
             for order in self.orders
-
             if getattr(
                 order,
                 "id_route",
@@ -109,34 +94,30 @@ class GPSEvents:
     # =========================================================
     # ACTIVE DELIVERY ORDERS
     # =========================================================
+    def get_active_orders_for_route(self, route):
 
-    def get_active_delivery_orders_for_route(
-        self,
-        route
-    ):
+        gps_statuses = [
+            "EN REPARTO RECOGIDA",
+            "RECOGIDO",
+            "EN REPARTO ENTREGA",
+            "ENTREGADO"
+        ]
 
         return [
-
             order
-            for order in self.get_orders_for_route(
-                route
-            )
-
+            for order in self.get_orders_for_route(route)
             if (
-                order.type_service == "ENTREGA"
-                and
-                order.status == "EN REPARTO ENTREGA"
+                order.status in gps_statuses
+                and getattr(order, "id_driver", None) == route.id_driver
             )
         ]
+
 
     # =========================================================
     # DRIVER STATE
     # =========================================================
 
-    def get_driver_state(
-        self,
-        driver
-    ):
+    def get_driver_state(self, driver):
 
         driver_id = driver.id_driver
 
@@ -147,7 +128,6 @@ class GPSEvents:
             )
 
             if not routes:
-
                 return None
 
             first_route = routes[0]
@@ -183,17 +163,13 @@ class GPSEvents:
     # CURRENT ROUTE
     # =========================================================
 
-    def get_current_route(
-        self,
-        driver
-    ):
+    def get_current_route(self, driver):
 
         routes = self.get_routes_for_driver(
             driver.id_driver
         )
 
         if not routes:
-
             return None
 
         state = self.get_driver_state(
@@ -201,7 +177,6 @@ class GPSEvents:
         )
 
         if state is None:
-
             return None
 
         route_index = int(
@@ -209,7 +184,6 @@ class GPSEvents:
         )
 
         if route_index >= len(routes):
-
             return None
 
         return routes[route_index]
@@ -218,10 +192,7 @@ class GPSEvents:
     # POSITION
     # =========================================================
 
-    def get_driver_position(
-        self,
-        driver
-    ):
+    def get_driver_position(self, driver):
 
         if driver.location is None:
 
@@ -233,7 +204,6 @@ class GPSEvents:
             )
 
         return {
-
             "latitude": float(
                 driver.location.latitude
             ),
@@ -247,17 +217,13 @@ class GPSEvents:
     # ADVANCE ROUTE
     # =========================================================
 
-    def advance_route(
-        self,
-        driver
-    ):
+    def advance_route(self, driver):
 
         state = self.get_driver_state(
             driver
         )
 
         if state is None:
-
             return False
 
         routes = self.get_routes_for_driver(
@@ -268,9 +234,7 @@ class GPSEvents:
             state["route_index"]
         )
 
-        next_index = (
-            current_index + 1
-        )
+        next_index = current_index + 1
 
         if next_index >= len(routes):
 
@@ -302,9 +266,7 @@ class GPSEvents:
             float(next_route.longitude)
         )
 
-        state["route_index"] = (
-            next_index
-        )
+        state["route_index"] = next_index
 
         state["route_id"] = (
             next_route.id_route
@@ -327,36 +289,28 @@ class GPSEvents:
 
         return (
             start
-            +
-            (target - start)
-            * progress
+            + (target - start) * progress
         )
 
     # =========================================================
     # ARRIVE
     # =========================================================
-
     def arrive_at_route(
         self,
         driver,
         route
     ):
 
-        orders = (
-            self.get_active_delivery_orders_for_route(
-                route
-            )
-        )
+        orders = self.get_active_orders_for_route(route)
+
+        arrived_orders = []
 
         for order in orders:
 
-            order.set_status(
-                "ENTREGADO",
-                self.fecha_actual
-            )
+            arrived_orders.append(order)
 
             print(
-                f"ENTREGADO -> "
+                f"[GPS] LLEGADA DESTINO -> "
                 f"Pedido {order.id_order} | "
                 f"{route.street} "
                 f"{route.house_number}"
@@ -369,44 +323,129 @@ class GPSEvents:
             )
         )
 
-        self.advance_route(
-            driver
-        )
+        self.advance_route(driver)
+
+        return arrived_orders
+
 
     # =========================================================
     # SEND GPS
     # =========================================================
 
-    def send_gps(
-        self,
-        driver
-    ):
+    def send_gps(self, driver):
 
-        route = self.get_current_route(
-            driver
-        )
-
-        if route is None:
-
-            return None
-
-        active_orders = (
-            self.get_active_delivery_orders_for_route(
-                route
-            )
-        )
-
-        if not active_orders:
-
-            return None
-
-        state = self.get_driver_state(
-            driver
-        )
+        state = self.get_driver_state(driver)
 
         if state is None:
-
             return None
+
+        routes = self.get_routes_for_driver(driver.id_driver)
+
+        if not routes:
+            return None
+
+        # ==========================================================
+        # BUSCAR TODAS LAS RUTAS QUE TIENEN PEDIDOS ACTIVOS
+        # ==========================================================
+
+        active_routes = []
+
+        for route in routes:
+
+            active_orders = self.get_active_orders_for_route(route)
+
+            if active_orders:
+                active_routes.append(
+                    (route, active_orders)
+                )
+
+        if not active_routes:
+            return None
+
+        # ==========================================================
+        # SELECCIONAR RUTA
+        # ==========================================================
+
+        current_route_index = int(state["route_index"])
+
+        selected_route = None
+        selected_orders = None
+        selected_index = None
+
+        # Primero intentamos continuar desde la ruta actual
+        for route, orders in active_routes:
+
+            route_index = next(
+                (
+                    i
+                    for i, r in enumerate(routes)
+                    if r.id_route == route.id_route
+                ),
+                None
+            )
+
+            if route_index is None:
+                continue
+
+            if route_index >= current_route_index:
+
+                selected_route = route
+                selected_orders = orders
+                selected_index = route_index
+                break
+
+        # Si no encontramos ninguna hacia delante,
+        # seleccionamos la primera ruta activa.
+        if selected_route is None:
+
+            selected_route, selected_orders = active_routes[0]
+
+            selected_index = next(
+                (
+                    i
+                    for i, r in enumerate(routes)
+                    if r.id_route == selected_route.id_route
+                ),
+                None
+            )
+
+        if selected_index is None:
+            return None
+
+        # ==========================================================
+        # SI HEMOS CAMBIADO DE RUTA, ACTUALIZAMOS EL ESTADO
+        # ==========================================================
+
+        if selected_index != int(state["route_index"]):
+
+            previous_route = routes[
+                int(state["route_index"])
+            ] if int(state["route_index"]) < len(routes) else None
+
+            state["route_index"] = selected_index
+            state["route_id"] = selected_route.id_route
+            state["progress"] = 0.0
+
+            # La posición actual del driver será el punto de partida
+            current_position = self.get_driver_position(driver)
+
+            state["start_latitude"] = current_position["latitude"]
+            state["start_longitude"] = current_position["longitude"]
+
+            state["target_latitude"] = float(
+                selected_route.latitude
+            )
+
+            state["target_longitude"] = float(
+                selected_route.longitude
+            )
+
+        route = selected_route
+        active_orders = selected_orders
+
+        # ==========================================================
+        # AVANZAR
+        # ==========================================================
 
         current_progress = float(
             state["progress"]
@@ -417,33 +456,27 @@ class GPSEvents:
             0.25
         )
 
-        new_progress = (
-            current_progress
-            + increment
+        new_progress = min(
+            1.0,
+            current_progress + increment
         )
 
-        if new_progress >= 1.0:
+        state["progress"] = new_progress
 
-            new_progress = 1.0
-
-        state["progress"] = (
-            new_progress
+        start_latitude = float(
+            state["start_latitude"]
         )
 
-        start_latitude = (
-            float(state["start_latitude"])
+        start_longitude = float(
+            state["start_longitude"]
         )
 
-        start_longitude = (
-            float(state["start_longitude"])
+        target_latitude = float(
+            state["target_latitude"]
         )
 
-        target_latitude = (
-            float(state["target_latitude"])
-        )
-
-        target_longitude = (
-            float(state["target_longitude"])
+        target_longitude = float(
+            state["target_longitude"]
         )
 
         new_latitude = self.interpolate(
@@ -458,9 +491,15 @@ class GPSEvents:
             new_progress
         )
 
+        arrived_orders = []
+
+        # ==========================================================
+        # LLEGADA
+        # ==========================================================
+
         if new_progress >= 1.0:
 
-            self.arrive_at_route(
+            arrived_orders = self.arrive_at_route(
                 driver,
                 route
             )
@@ -492,28 +531,21 @@ class GPSEvents:
                 new_location.longitude
             )
 
-        gps_event_id = (
-            self.id_event_gps()
-        )
+        # ==========================================================
+        # EVENTO GPS
+        # ==========================================================
+
+        gps_event_id = self.id_event_gps()
 
         value = {
-
             "gps_event_id": gps_event_id,
-
             "id_driver": driver.id_driver,
-
             "timestamp": self.timestamp(),
-
             "latitude": latitude,
-
             "longitude": longitude,
-
             "id_route": route.id_route,
-
             "street": route.street,
-
             "house_number": route.house_number,
-
             "priority": route.priority
         }
 
@@ -522,30 +554,31 @@ class GPSEvents:
         )
 
         print(
-            f"# GPS REPARTIDOR: "
-            f"{driver.id_driver}"
+            f"[GPS] Repartidor {driver.id_driver} | "
+            f"Ruta {route.id_route} | "
+            f"Progreso {new_progress:.2f} | "
+            f"Pedidos activos {len(active_orders)}"
         )
 
-        return key, value
-
-    # =========================================================
-    # GENERATE
-    # =========================================================
-
+        return (
+            key,
+            value,
+            arrived_orders
+        )
+        
     def generate_event(self):
 
         events = []
 
         for driver in self.drivers:
 
-            event = self.send_gps(
-                driver
-            )
+            event = self.send_gps(driver)
 
             if event is not None:
+                events.append(event)
 
-                events.append(
-                    event
-                )
+        print(
+            f"[GPS] Eventos generados: {len(events)}"
+        )
 
         return events

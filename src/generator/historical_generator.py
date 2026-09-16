@@ -311,6 +311,28 @@ class OrderHistoricalGenerator:
 
         return self.historical_orders
 
+
+    def format_status_history(self, status_history):
+
+        if not status_history:
+            return ""
+
+        history = []
+
+        for status, date in status_history.items():
+
+            if date is None:
+                continue
+
+            date_str = date.strftime("%d/%m/%Y")
+
+            history.append(
+                f"{status}: {date_str}"
+            )
+
+        return ", ".join(history)
+
+    
     # =====================================================
     # DÍA OPERATIVO
     # =====================================================
@@ -1065,12 +1087,12 @@ class OrderHistoricalGenerator:
                 "delivery_country": order.delivery_country
             }
 
-            for status, column_name in STATUS_COLUMNS.items():
+            
+            record["status_history"] = ", ".join( f"{status}: {date.strftime('%d/%m/%Y %H:%M:%S')}" 
+            for status, date in order.status_history.items() if date is not None )
 
-                record[column_name] = (
-                    order.status_history.get(status)
-                )
 
+          
             records.append(record)
 
         return pd.DataFrame(records)

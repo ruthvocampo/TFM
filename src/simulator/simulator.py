@@ -1,59 +1,24 @@
-from datetime import (
-    timedelta,
-    datetime
-)
-
+from datetime import timedelta,datetime
+from pathlib import Path
 import json
 import time
 import pandas as pd
 
-from src.generator.address_generator import (
-    AddressGenerator
-)
+from src.generator.address_generator import AddressGenerator
+from src.generator.drivers_generator import DriverGenerator
+from src.generator.orders_generator import OrderGenerator
+from src.generator.historical_generator import OrderHistoricalGenerator
+from src.generator.order_event import OrderEvents
+from src.generator.route_generator import RouteGenerator
+from src.generator.gps_events import GPSEvents
+from src.generator.incident_historical_generator import IncidentHistoricalGenerator
+from src.generator.weather_event import WeatherEventGenerator
 
-from src.generator.drivers_generator import (
-    DriverGenerator
-)
+from src.apis.traffic_api import TrafficApi
 
-from src.generator.orders_generator import (
-    OrderGenerator
-)
+from src.kafka.producer import KafkaProducer
 
-from src.generator.historical_generator import (
-    OrderHistoricalGenerator
-)
-
-from src.generator.order_event import (
-    OrderEvents
-)
-
-from src.generator.route_generator import (
-    RouteGenerator
-)
-
-from src.generator.gps_events import (
-    GPSEvents
-)
-
-from src.generator.incident_historical_generator import (
-    IncidentHistoricalGenerator
-)
-
-from src.generator.weather_event import (
-    WeatherEventGenerator
-)
-
-from src.apis.traffic_api import (
-    TrafficApi
-)
-
-from src.kafka.producer import (
-    KafkaProducer
-)
-
-from src.onelake_client import (
-    OnelakeClient
-)
+from src.onelake_client import OnelakeClient
 
 from src.objects.order import Order
 from src.objects.driver import Driver
@@ -85,22 +50,13 @@ class Simulator:
     # INIT
     # =========================================================
 
-    def __init__(
-        self,
-        fecha_actual
-    ):
+    def __init__(self,fecha_actual):
 
-        self.fecha_actual = (
-            fecha_actual
-        )
+        self.fecha_actual = (fecha_actual)
 
-        self.client_onelk = (
-            OnelakeClient()
-        )
+        self.client_onelk = (OnelakeClient())
 
-        self.kproducer = (
-            KafkaProducer()
-        )
+        self.kproducer = (KafkaProducer())
 
         self.kproducer.create_topics()
 
@@ -137,7 +93,6 @@ class Simulator:
     # =========================================================
 
     def state_exists(self):
-
         return self.STATE_FILE.exists()
 
     # =========================================================
@@ -146,86 +101,45 @@ class Simulator:
 
     def generate_initial_data(self):
 
-        print(
-            "Generando datos iniciales..."
-        )
+        print("Generando datos iniciales...")
 
-        address_generator = AddressGenerator(
-            self.SPAIN_FILE,
-            self.MADRID_FILE
-        )
+        address_generator = AddressGenerator(self.SPAIN_FILE,self.MADRID_FILE)
 
-        addresses_spain = (
-            address_generator
-            .get_address_spain_df()
-        )
+        addresses_spain = ( address_generator.get_address_spain_df())
 
-        addresses_madrid = (
-            address_generator
-            .get_address_madrid_df()
-        )
+        addresses_madrid = (address_generator.get_address_madrid_df())
 
         # -----------------------------------------------------
         # DRIVERS
         # -----------------------------------------------------
 
-        driver_generator = DriverGenerator(
-            [],
-            addresses_madrid
-        )
+        driver_generator = DriverGenerator([],addresses_madrid)
 
-        self.drivers = (
-            driver_generator
-            .create_drivers(270)
-        )
+        self.drivers = (driver_generator .create_drivers(270))
 
         # -----------------------------------------------------
         # ROUTES
         # -----------------------------------------------------
 
-        route_generator = RouteGenerator(
-            self.drivers,
-            addresses_madrid,
-            self.fecha_actual
-        )
+        route_generator = RouteGenerator(self.drivers,addresses_madrid,self.fecha_actual)
 
-        self.routes = (
-            route_generator
-            .create_routes()
-        )
+        self.routes = ( route_generator.create_routes())
 
         # -----------------------------------------------------
         # HISTORICAL ORDERS
         # -----------------------------------------------------
 
-        historical_generator = (
-            OrderHistoricalGenerator(
-                self.drivers,
-                addresses_madrid,
-                addresses_spain,
-                self.fecha_actual
-            )
-        )
+        historical_generator = ( OrderHistoricalGenerator(self.drivers,addresses_madrid,addresses_spain,self.fecha_actual))
 
-        self.historical_orders = (
-            historical_generator
-            .create_historical(6000)
-        )
+        self.historical_orders = (historical_generator.create_historical(6000))
 
         # -----------------------------------------------------
         # HISTORICAL INCIDENTS
         # -----------------------------------------------------
 
-        historical_incident_generator = (
-            IncidentHistoricalGenerator(
-                self.historical_orders
-            )
-        )
+        historical_incident_generator = (IncidentHistoricalGenerator(self.historical_orders))
 
-        self.historical_incidents = (
-            historical_incident_generator
-            .create_historical_incidents()
-        )
+        self.historical_incidents = (historical_incident_generator.create_historical_incidents())
 
         # -----------------------------------------------------
         # ORDERS TODAY
@@ -1721,24 +1635,34 @@ class Simulator:
     # =========================================================
     # WRITE FILE
     # =========================================================
-
     def write_file(
         self,
         path,
         dataframe
     ):
+        # Convertimos la ruta a Path
+        path = Path(path)
 
-        path = str(path)
+        # -----------------------------------------------------
+        # CREAR LA CARPETA PADRE
+        # -----------------------------------------------------
 
-        suffix = (
-            path.rsplit(
-                ".",
-                1
-            )[-1]
-            .lower()
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True
         )
 
-        if suffix == "parquet":
+        # -----------------------------------------------------
+        # OBTENER EXTENSIÓN
+        # -----------------------------------------------------
+
+        suffix = path.suffix.lower()
+
+        # -----------------------------------------------------
+        # PARQUET
+        # -----------------------------------------------------
+
+        if suffix == ".parquet":
 
             dataframe = dataframe.copy()
 
@@ -1748,9 +1672,7 @@ class Simulator:
                     dataframe["location"]
                     .apply(
                         lambda location:
-                        float(
-                            location.latitude
-                        )
+                        float(location.latitude)
                         if location is not None
                         else None
                     )
@@ -1760,9 +1682,7 @@ class Simulator:
                     dataframe["location"]
                     .apply(
                         lambda location:
-                        float(
-                            location.longitude
-                        )
+                        float(location.longitude)
                         if location is not None
                         else None
                     )
@@ -1773,67 +1693,89 @@ class Simulator:
                 )
 
             dataframe.to_parquet(
-                path,
+                str(path),
                 index=False
             )
 
-        elif suffix == "csv":
+        # -----------------------------------------------------
+        # CSV
+        # -----------------------------------------------------
+
+        elif suffix == ".csv":
 
             dataframe.to_csv(
-                path,
+                str(path),
                 index=False
             )
 
-        elif suffix == "xlsx":
+        # -----------------------------------------------------
+        # EXCEL
+        # -----------------------------------------------------
+
+        elif suffix == ".xlsx":
 
             dataframe.to_excel(
-                path,
+                str(path),
                 index=False
             )
 
-        elif suffix == "json":
+        # -----------------------------------------------------
+        # JSON
+        # -----------------------------------------------------
+
+        elif suffix == ".json":
 
             dataframe.to_json(
-                path,
+                str(path),
                 orient="records",
                 force_ascii=False,
                 indent=4,
                 date_format="iso"
             )
 
+        # -----------------------------------------------------
+        # FORMATO NO SOPORTADO
+        # -----------------------------------------------------
+
         else:
 
             raise ValueError(
-                f"Unsupported file format: "
-                f"{suffix}"
+                f"Unsupported file format: {suffix}"
             )
-
     # =========================================================
     # GENERATE OUTPUT FILES
     # =========================================================
-
     def generate_files(self):
+
         str_fecha = self.fecha_actual.strftime("%Y-%m-%d")
-        
-        str_año = self.fecha_actual.strftime('%Y')
-        
-        str_mes = self.fecha_actual.strftime('%m')
+
+        print()
+        print("=" * 70)
+        print(f"[BATCH] GENERANDO ARCHIVOS DEL DÍA {str_fecha}")
+        print("=" * 70)
+
         # -----------------------------------------------------
         # HISTORICAL ORDERS
         # -----------------------------------------------------
+        historical_records = []
 
-        historical_records = [
-            vars(order).copy()
-            for order
-            in self.historical_orders
-        ]
+        for order in self.historical_orders:
+
+            record = vars(order).copy()
+
+            record["status_history"] = ", ".join(
+                f"{status}: {date.strftime('%d/%m/%Y %H:%M:%S')}"
+                for status, date in order.status_history.items()
+                if date is not None
+            )
+
+            historical_records.append(record)
 
         historical_df = pd.DataFrame(
             historical_records
         )
-
         historical_orders_file = (
-            f"{GENERATED_HISTORICAL_ORDERS}"
+            f"{GENERATED_HISTORICAL_ORDERS}" f"/{str_fecha}"
             "/historical_orders.csv"
         )
 
@@ -1843,8 +1785,13 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_HISTORICAL_ORDERS+  f"/{self.fecha_actual.strftime('%Y')}",
+            f"{LANDING_HISTORICAL_ORDERS}"f"/{str_fecha}",
             historical_orders_file
+        )
+
+        print(
+            f"[BATCH] Historical orders: "
+            f"{historical_orders_file}"
         )
 
         # -----------------------------------------------------
@@ -1854,13 +1801,14 @@ class Simulator:
         orders_df = pd.DataFrame(
             [
                 vars(order)
-                for order
-                in self.orders
+                for order in self.orders
             ]
         )
 
+        # AHORA: AÑO + DÍA
         orders_file = (
             f"{GENERATED_ORDERS}"
+            f"/{str_fecha}"
             "/orders.xlsx"
         )
 
@@ -1870,8 +1818,13 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_ORDERS+  f"/{str_fecha}",
+            f"{LANDING_ORDERS}/{str_fecha}",
             orders_file
+        )
+
+        print(
+            f"[BATCH] Orders: "
+            f"{orders_file}"
         )
 
         # -----------------------------------------------------
@@ -1881,13 +1834,14 @@ class Simulator:
         drivers_df = pd.DataFrame(
             [
                 vars(driver)
-                for driver
-                in self.drivers
+                for driver in self.drivers
             ]
         )
 
+        # AHORA: AÑO + DÍA
         drivers_file = (
             f"{GENERATED_DRIVERS}"
+            f"/{str_fecha}"
             "/drivers.parquet"
         )
 
@@ -1897,8 +1851,13 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_DRIVERS+  f"/{str_fecha}",
+            f"{LANDING_DRIVERS}/{str_fecha}",
             drivers_file
+        )
+
+        print(
+            f"[BATCH] Drivers: "
+            f"{drivers_file}"
         )
 
         # -----------------------------------------------------
@@ -1908,13 +1867,14 @@ class Simulator:
         routes_df = pd.DataFrame(
             [
                 vars(route)
-                for route
-                in self.routes
+                for route in self.routes
             ]
         )
 
+        # AHORA: AÑO + DÍA
         routes_file = (
             f"{GENERATED_ROUTES}"
+            f"/{str_fecha}"
             "/routes.json"
         )
 
@@ -1924,26 +1884,30 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_ROUTES+  f"/{str_fecha}",
+            f"{LANDING_ROUTES}/{str_fecha}",
             routes_file
+        )
+
+        print(
+            f"[BATCH] Routes: "
+            f"{routes_file}"
         )
 
         # -----------------------------------------------------
         # HISTORICAL INCIDENTS
         # -----------------------------------------------------
 
-        historical_incidents_df = (
-            pd.DataFrame(
-                [
-                    vars(incident)
-                    for incident
-                    in self.historical_incidents
-                ]
-            )
+        historical_incidents_df = pd.DataFrame(
+            [
+                vars(incident)
+                for incident in self.historical_incidents
+            ]
         )
 
+        # AHORA: AÑO + DÍA
         historical_incidents_file = (
             f"{GENERATED_HISTORICAL_INCIDENTS}"
+            f"/{str_fecha}"
             "/historical_incidents.json"
         )
 
@@ -1953,10 +1917,21 @@ class Simulator:
         )
 
         self.client_onelk.load_file(
-            LANDING_HISTORICAL_INCIDENTS+  f"/{str_fecha}",
+            f"{LANDING_HISTORICAL_INCIDENTS}/{str_fecha}",
             historical_incidents_file
         )
 
+        print(
+            f"[BATCH] Historical incidents: "
+            f"{historical_incidents_file}"
+        )
+
+        print()
+        print(
+            f"[BATCH] Archivos del día "
+            f"{str_fecha} generados correctamente."
+        )
+        print("=" * 70)
     # =========================================================
     # REAL DATA FILES
     # =========================================================
@@ -2053,11 +2028,215 @@ class Simulator:
                     order_event,
                     "id_event"
                 )
+    from datetime import timedelta
+
+
+    def start_new_day(self):
+        """
+        Prepara los pedidos para el nuevo día de simulación.
+
+        Prioridad:
+        1. Pedidos atrasados y todavía no finalizados.
+        2. Pedidos cuyo día esperado es hoy.
+        3. Pedidos de mañana si ya han sido creados.
+
+        Los pedidos que ya estaban activos conservan su estado.
+        """
+
+        today = self.fecha_actual.date()
+        tomorrow = today + timedelta(days=1)
+
+        final_statuses = {
+            "RECOGIDO",
+            "ENTREGADO",
+            "RECHAZADO",
+            "CANCELADO"
+        }
+
+        print()
+        print("=" * 70)
+        print(f"[DAY] PREPARANDO NUEVO DÍA: {today}")
+        print("=" * 70)
+
+        # ---------------------------------------------------------
+        # 1. Guardamos los pedidos que ya estaban activos
+        # ---------------------------------------------------------
+
+        active_orders = {
+            str(order.id_order): order
+            for order in self.orders
+            if order.status not in final_statuses
+        }
+
+        # ---------------------------------------------------------
+        # 2. Buscamos los pedidos candidatos en el histórico
+        # ---------------------------------------------------------
+
+        candidates = []
+
+        for order in self.historical_orders:
+
+            if order.order_created_date is None:
+                continue
+
+            if order.order_expected_date is None:
+                continue
+
+            # Nunca usar pedidos creados en el futuro
+            if order.order_created_date.date() > today:
+                continue
+
+            # No volver a planificar pedidos finalizados
+            if order.status in final_statuses:
+                continue
+
+            expected_date = order.order_expected_date.date()
+
+            # Solo atrasados, hoy o mañana
+            if expected_date > tomorrow:
+                continue
+
+            candidates.append(order)
+
+        # ---------------------------------------------------------
+        # 3. Ordenamos por fecha esperada
+        # ---------------------------------------------------------
+
+        candidates.sort(
+            key=lambda order: order.order_expected_date
+        )
+
+        # ---------------------------------------------------------
+        # 4. Construimos los pedidos del nuevo día
+        # ---------------------------------------------------------
+
+        new_orders = []
+        added_ids = set()
+
+        # Primero mantenemos los pedidos que ya estaban activos
+        for order in self.orders:
+
+            if order.status in final_statuses:
+                continue
+
+            order_id = str(order.id_order)
+
+            new_orders.append(order)
+            added_ids.add(order_id)
+
+        # ---------------------------------------------------------
+        # 5. Añadimos nuevos pedidos candidatos
+        # ---------------------------------------------------------
+
+        for order in candidates:
+
+            order_id = str(order.id_order)
+
+            # Ya estaba activo
+            if order_id in added_ids:
+                continue
+
+            # Pedido nuevo que entra en la simulación
+            if order.type_service == "RECOGIDA":
+
+                order.status = "PENDIENTE DE ASIGNACIÓN RECOGIDA"
+
+            elif order.type_service == "ENTREGA":
+
+                order.status = "PENDIENTE DE ASIGNACIÓN ENTREGA"
+
+            else:
+                continue
+
+            # Reiniciamos información operacional
+            order.id_driver = None
+            order.id_driver_pickup = None
+            order.id_driver_delivery = None
+            order.id_route = None
+
+            order.status_modified_date = self.fecha_actual
+
+            order.status_history[
+                order.status
+            ] = self.fecha_actual
+
+            new_orders.append(order)
+            added_ids.add(order_id)
+
+        # ---------------------------------------------------------
+        # 6. Actualizamos self.orders
+        # ---------------------------------------------------------
+
+        self.orders = new_orders
+
+        print(
+            f"[DAY] Pedidos activos para {today}: "
+            f"{len(self.orders)}"
+        )
+
+        # ---------------------------------------------------------
+        # 7. Recreamos los generadores con los pedidos actuales
+        # ---------------------------------------------------------
+
+        self.order_event_generator = OrderEvents(
+            self.orders,
+            self.drivers,
+            self.routes,
+            self.fecha_actual
+        )
+
+        self.gps_event_generator = GPSEvents(
+            self.orders,
+            self.drivers,
+            self.routes,
+            self.fecha_actual
+        )
+
+        self.update_event_generators()
+
+        print("[DAY] Generadores actualizados.")
     
+    def sync_orders_with_historical(self):
+        """
+        Sincroniza el estado operativo de self.orders
+        con self.historical_orders.
+        """
+
+        historical_by_id = {
+            str(order.id_order): order
+            for order in self.historical_orders
+        }
+
+        for order in self.orders:
+
+            historical_order = historical_by_id.get(
+                str(order.id_order)
+            )
+
+            if historical_order is None:
+                continue
+
+            historical_order.id_driver = order.id_driver
+            historical_order.id_driver_pickup = order.id_driver_pickup
+            historical_order.id_driver_delivery = order.id_driver_delivery
+            historical_order.id_route = order.id_route
+
+            historical_order.status = order.status
+            historical_order.status_modified_date = (
+                order.status_modified_date
+            )
+
+            historical_order.status_history = dict(
+                order.status_history
+            )
     # =========================================================
     # RUN
     # =========================================================
     def run(self, steps=1, realtime=False):
+
+        # ---------------------------------------------------------
+        # CARGAR O INICIALIZAR SIMULACIÓN
+        # ---------------------------------------------------------
 
         if self.state_exists():
 
@@ -2068,11 +2247,23 @@ class Simulator:
             print("[STATE] No existe checkpoint.")
 
             self.generate_initial_data()
+
             self.generate_files()
+
             self.save_state()
-        
-        print(f"FECHA ACTUAL" f"{self.fecha_actual.strftime('%Y-%m-%d')}")
-        
+
+        print(
+            f"FECHA ACTUAL: "
+            f"{self.fecha_actual.strftime('%Y-%m-%d %H:%M')}"
+        )
+
+        # Guardamos el día con el que comienza esta ejecución
+        current_simulation_date = self.fecha_actual.date()
+
+        # ---------------------------------------------------------
+        # LOOP PRINCIPAL
+        # ---------------------------------------------------------
+
         for step in range(steps):
 
             print()
@@ -2083,34 +2274,109 @@ class Simulator:
                 f"{self.fecha_actual.strftime('%Y-%m-%d %H:%M')}"
             )
             print("=" * 70)
-            hora = self.fecha_actual.hour
-            if hora==6:
-                print("[BATCH] Son las 06:00. Generando archivos...")
-                # Archivos
+
+            # -----------------------------------------------------
+            # DETECTAR CAMBIO DE DÍA
+            # -----------------------------------------------------
+
+            if self.fecha_actual.date() != current_simulation_date:
+
+                current_simulation_date = self.fecha_actual.date()
+
+                print()
+                print(
+                    f"[DAY] Cambio de día detectado: "
+                    f"{current_simulation_date}"
+                )
+
+                self.start_new_day()
+
+            # -----------------------------------------------------
+            # BATCH DIARIO - 06:00
+            # -----------------------------------------------------
+
+            if self.fecha_actual.hour == 6:
+
+                print(
+                    "[BATCH] Son las 06:00. "
+                    "Generando archivos..."
+                )
+
                 self.generate_files()
-                    
-            # Eventos de la hora actual
+
+            # -----------------------------------------------------
+            # ORDER EVENTS
+            # -----------------------------------------------------
+
             self.create_order_event()
-            # GPS mueve al repartidor
+
+            # -----------------------------------------------------
+            # GPS EVENTS
+            # -----------------------------------------------------
+
             arrived_orders = self.create_gps_events()
-            # Si llega al destino, se marca ENTREGADO
-            self.process_arrived_orders(arrived_orders)
-            #self.generate_weather_event()
-            #self.generate_traffic_event()
+
+            # -----------------------------------------------------
+            # PROCESAR LLEGADAS GPS
+            # -----------------------------------------------------
+
+            self.process_arrived_orders(
+                arrived_orders
+            )
+
+            # -----------------------------------------------------
+            # WEATHER EVENTS
+            # -----------------------------------------------------
+
+            self.generate_weather_event()
+
+            # -----------------------------------------------------
+            # TRAFFIC EVENTS
+            # -----------------------------------------------------
+
+            self.generate_traffic_event()
+
+            # -----------------------------------------------------
+            # GENERAR ARCHIVOS DE DATOS REALES
+            # -----------------------------------------------------
 
             self.generate_real_data_files()
 
-            # Avanzar reloj
+            # -----------------------------------------------------
+            # SINCRONIZAR PEDIDOS CON EL HISTÓRICO
+            # -----------------------------------------------------
+
+            self.sync_orders_with_historical()
+
+            # -----------------------------------------------------
+            # AVANZAR 1 HORA SIMULADA
+            # -----------------------------------------------------
+
             self.advance_time(60)
 
-            # Guardar checkpoint ya avanzado
+            # -----------------------------------------------------
+            # GUARDAR CHECKPOINT
+            # -----------------------------------------------------
+
             self.save_state()
 
+            # -----------------------------------------------------
+            # MODO TIEMPO REAL
+            # -----------------------------------------------------
+
             if realtime:
+
                 time.sleep(60)
+
+        # ---------------------------------------------------------
+        # FLUSH KAFKA
+        # ---------------------------------------------------------
 
         self.kproducer.flush()
 
         print()
         print("Simulación finalizada.")
-        print(f"Estado actual: {self.fecha_actual}")
+        print(
+            f"Estado actual: "
+            f"{self.fecha_actual}"
+        )

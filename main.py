@@ -2,28 +2,39 @@ import argparse
 from datetime import datetime
 
 from src.simulator.simulator import Simulator
-def main():
 
+
+def main():
     parser = argparse.ArgumentParser(
         description="Simulador logístico Kafka"
     )
 
     parser.add_argument(
-        "--steps",
-        type=int,
-        default=1,
+        "--speed",
+        type=float,
+        default=60.0,
         help=(
-            "Número de horas simuladas "
-            "a ejecutar."
+            "Minutos simulados por segundo real. "
+            "60 = 1 minuto simulado por segundo real."
         )
     )
 
     parser.add_argument(
-        "--realtime",
-        action="store_true",
+        "--step-minutes",
+        type=int,
+        default=1,
         help=(
-            "Espera 60 segundos reales "
-            "por cada hora simulada."
+            "Minutos simulados que avanza el reloj "
+            "en cada tick."
+        )
+    )
+
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=10,
+        help=(
+            "Cada cuántos ticks se guarda el estado."
         )
     )
 
@@ -32,7 +43,15 @@ def main():
         action="store_true",
         help=(
             "Elimina el estado persistido "
-            "y crea una simulación nueva."
+            "y comienza una simulación nueva."
+        )
+    )
+
+    parser.add_argument(
+        "--no-batch",
+        action="store_true",
+        help=(
+            "No genera los archivos batch iniciales."
         )
     )
 
@@ -41,41 +60,36 @@ def main():
     # ---------------------------------------------------------
     # FECHA INICIAL
     # ---------------------------------------------------------
-    #
-    # Solo se utiliza si NO existe state.json.
-    #
 
-    fecha_actual = datetime(
+    fecha_inicial = datetime(
         2026,
         9,
-        11,
+        16,
         6,
-        0,
         0
     )
 
+    # ---------------------------------------------------------
+    # CREAR SIMULADOR
+    # ---------------------------------------------------------
+
     simulator = Simulator(
-        fecha_actual
+        fecha_inicial
     )
 
     # ---------------------------------------------------------
-    # RESET
+    # EJECUTAR UN DÍA
     # ---------------------------------------------------------
 
-    if args.reset:
-
-        simulator.reset_state()
-
-    # ---------------------------------------------------------
-    # RUN
-    # ---------------------------------------------------------
-
-    simulator.run(
-        steps=args.steps,
-        realtime=args.realtime
+    simulator.run_day(
+        simulated_minutes_per_second=args.speed,
+        start_time=fecha_inicial,
+        reset=args.reset,
+        step_minutes=args.step_minutes,
+        checkpoint_every_steps=args.checkpoint_every,
+        generate_batch=not args.no_batch
     )
 
 
 if __name__ == "__main__":
-
     main()

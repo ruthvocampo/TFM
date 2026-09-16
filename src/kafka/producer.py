@@ -55,8 +55,6 @@ class KafkaProducer:
             "order-events": schemas_dir / "order_event.avsc",
             "gps-events": schemas_dir / "gps_event.avsc",
             "incident-events": schemas_dir / "incident_event.avsc",
-            "traffic-events": schemas_dir / "traffic_event.avsc",
-            "weather-events": schemas_dir / "weather_event.avsc",
         }
 
         for topic, schema_path in schema_files.items():

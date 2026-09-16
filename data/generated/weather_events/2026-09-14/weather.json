@@ -1,0 +1,24 @@
+{
+    "weather_event_id": 23,
+    "province": "Madrid",
+    "municipality": "Madrid",
+    "station": "8",
+    "station_name": "Escuelas Aguirre",
+    "year": 2026,
+    "month": 9,
+    "day": 14,
+    "hour": 1,
+    "timestamp": "2026-09-14 01:00:00",
+    "measurements": {
+        "TEMPERATURA": {
+            "magnitude_code": "83",
+            "value": 25.3,
+            "validation": "V"
+        },
+        "HUMEDAD_RELATIVA": {
+            "magnitude_code": "86",
+            "value": 38.0,
+            "validation": "V"
+        }
+    }
+}

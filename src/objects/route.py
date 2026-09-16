@@ -1,21 +1,12 @@
 class Route:
 
-    def __init__(
-        self,
-        id_route,
-        id_driver,
-        postal_code,
-        street,
-        house_number,
-        latitude,
-        longitude,
-        priority=0
-    ):
+    def __init__( self, id_route, id_driver, postal_code, street, house_number, qualifier="", latitude=None, longitude=None, priority=0 ):
         self.id_route = id_route
         self.id_driver = id_driver
         self.postal_code = postal_code
         self.street = street
         self.house_number = house_number
+        self.qualifier = qualifier
         self.latitude = float(latitude)
         self.longitude = float(longitude)
         self.priority = priority

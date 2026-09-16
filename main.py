@@ -3,6 +3,11 @@ from datetime import datetime
 
 from src.simulator.simulator import Simulator
 
+import os
+
+bootstrap_servers = os.getenv("CONFLUENT_BOOTSTRAP_SERVERS")
+api_key = os.getenv("CONFLUENT_API_KEY")
+api_secret = os.getenv("CONFLUENT_API_SECRET")
 
 def main():
     parser = argparse.ArgumentParser(

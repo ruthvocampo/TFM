@@ -1,4 +1,5 @@
 from pathlib import Path
+from dotenv import load_dotenv
 
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
@@ -11,31 +12,55 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 class KafkaProducer:
 
     def __init__(self):
-        self.config = self.read_config()
 
-        # ---------------------------------------------------------
-        # Kafka
-        # ---------------------------------------------------------
+        load_dotenv()
+
+        bootstrap_servers = os.getenv("CONFLUENT_BOOTSTRAP_SERVERS")
+        kafka_api_key = os.getenv("CONFLUENT_API_KEY")
+        kafka_api_secret = os.getenv("CONFLUENT_API_SECRET")
+
+        schema_registry_url = os.getenv("SCHEMA_REGISTRY_URL")
+        schema_registry_api_key = os.getenv("SCHEMA_REGISTRY_API_KEY")
+        schema_registry_api_secret = os.getenv("SCHEMA_REGISTRY_API_SECRET")
+
+        required = {
+            "CONFLUENT_BOOTSTRAP_SERVERS": bootstrap_servers,
+            "CONFLUENT_API_KEY": kafka_api_key,
+            "CONFLUENT_API_SECRET": kafka_api_secret,
+            "SCHEMA_REGISTRY_URL": schema_registry_url,
+            "SCHEMA_REGISTRY_API_KEY": schema_registry_api_key,
+            "SCHEMA_REGISTRY_API_SECRET": schema_registry_api_secret,
+        }
+
+        missing = [
+            name
+            for name, value in required.items()
+            if not value
+        ]
+
+        if missing:
+            raise ValueError(
+                "Faltan variables de entorno: "
+                + ", ".join(missing)
+            )
+
         kafka_config = {
-            "bootstrap.servers": self.config["bootstrap.servers"],
-            "security.protocol": self.config["security.protocol"],
-            "sasl.mechanisms": self.config["sasl.mechanisms"],
-            "sasl.username": self.config["sasl.username"],
-            "sasl.password": self.config["sasl.password"],
-            "client.id": self.config.get("client.id", "logistics-simulator"),
+            "bootstrap.servers": bootstrap_servers,
+            "security.protocol": "SASL_SSL",
+            "sasl.mechanisms": "PLAIN",
+            "sasl.username": kafka_api_key,
+            "sasl.password": kafka_api_secret,
+            "client.id": "logistics-simulator",
         }
 
         self.producer = Producer(kafka_config)
         self.admin_client = AdminClient(kafka_config)
 
-        # ---------------------------------------------------------
-        # Schema Registry
-        # ---------------------------------------------------------
         schema_registry_config = {
-            "url": self.config["SCHEMA_REGISTRY_URL"],
+            "url": schema_registry_url,
             "basic.auth.user.info": (
-                f'{self.config["SCHEMA_REGISTRY_API_KEY"]}:'
-                f'{self.config["SCHEMA_REGISTRY_API_SECRET"]}'
+                f"{schema_registry_api_key}:"
+                f"{schema_registry_api_secret}"
             ),
         }
 
@@ -43,11 +68,8 @@ class KafkaProducer:
             schema_registry_config
         )
 
-        # ---------------------------------------------------------
-        # Avro serializers
-        # ---------------------------------------------------------
         base_dir = Path(__file__).resolve().parents[2]
-        schemas_dir = base_dir / "src"/"kafka"/"schemas"
+        schemas_dir = base_dir / "src" / "kafka" / "schemas"
 
         self.serializers = {}
 
@@ -60,8 +82,7 @@ class KafkaProducer:
         for topic, schema_path in schema_files.items():
             self.serializers[topic] = self.create_serializer(
                 topic,
-                schema_path
-            )
+                schema_path)
 
     # =============================================================
     # CONFIG
@@ -70,7 +91,8 @@ class KafkaProducer:
     def read_config(self):
         config = {}
 
-        env_path = Path(".env")
+        env_path = load_dotenv()
+
 
         if not env_path.exists():
             raise FileNotFoundError(
@@ -227,15 +249,7 @@ class KafkaProducer:
             NewTopic(
                 "incident-events",
                 num_partitions=3
-            ),
-            NewTopic(
-                "traffic-events",
-                num_partitions=3
-            ),
-            NewTopic(
-                "weather-events",
-                num_partitions=3
-            ),
+            )
         ]
 
         existing_topics = (

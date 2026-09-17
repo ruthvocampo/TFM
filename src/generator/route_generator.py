@@ -9,7 +9,6 @@ class RouteGenerator:
     WAREHOUSE_LATITUDE = 40.43134
     WAREHOUSE_LONGITUDE = -3.54512
 
-    # Posibles nombres de la columna de portal
     PORTAL_COLUMNS = [
         "PORTAL",
         "NUMERO",
@@ -22,7 +21,6 @@ class RouteGenerator:
         "NUM",
     ]
 
-    # Posibles nombres de la columna de calificador
     QUALIFIER_COLUMNS = [
         "CALIFICADOR",
         "CALIFICADOR_PORTAL",
@@ -36,8 +34,9 @@ class RouteGenerator:
         self.fecha_actual = fecha_actual
         self.routes = []
 
-    
+    # =========================================================
     # NORMALIZACIÓN
+    # =========================================================
 
     @staticmethod
     def _normalize(value):
@@ -47,15 +46,101 @@ class RouteGenerator:
 
         value = str(value).strip().upper()
 
-        # Evita casos como 9.0 cuando viene de pandas
         if value.endswith(".0"):
             value = value[:-2]
 
         return value
 
-    
+    # =========================================================
+    # CONVERTIR COORDENADAS DMS -> DECIMAL
+    # =========================================================
+
+    @staticmethod
+    def _dms_to_decimal(value):
+
+        if pd.isna(value):
+            return None
+
+        value = str(value).strip()
+
+        if not value:
+            return None
+
+        # -----------------------------------------------------
+        # Si ya es decimal
+        # -----------------------------------------------------
+
+        try:
+            return float(
+                value.replace(",", ".")
+            )
+
+        except ValueError:
+            pass
+
+        # -----------------------------------------------------
+        # Formato esperado:
+        #
+        # 40°26'15.32'' N
+        # 3°36'5.49'' W
+        # -----------------------------------------------------
+
+        try:
+
+            value = (
+                value
+                .replace("º", "°")
+                .replace("″", "''")
+                .replace('"', "''")
+            )
+
+            hemisphere = value[-1].upper()
+
+            if hemisphere not in ("N", "S", "E", "W"):
+                return None
+
+            value = value[:-1].strip()
+
+            degrees_part, rest = value.split("°", 1)
+
+            minutes_part, rest = rest.split("'", 1)
+
+            seconds_part = (
+                rest
+                .replace("''", "")
+                .replace("'", "")
+                .strip()
+            )
+
+            degrees = float(
+                degrees_part.replace(",", ".")
+            )
+
+            minutes = float(
+                minutes_part.replace(",", ".")
+            )
+
+            seconds = float(
+                seconds_part.replace(",", ".")
+            )
+
+            decimal = (
+                abs(degrees)
+                + minutes / 60
+                + seconds / 3600
+            )
+
+            if hemisphere in ("S", "W"):
+                decimal *= -1
+
+            return decimal
+
+        except (ValueError, TypeError):
+            return None
+
+    # =========================================================
     # DETECTAR COLUMNA PORTAL
-    
+    # =========================================================
 
     def _find_portal_column(self):
 
@@ -66,9 +151,9 @@ class RouteGenerator:
 
         return None
 
-    
+    # =========================================================
     # DETECTAR COLUMNA CALIFICADOR
-    
+    # =========================================================
 
     def _find_qualifier_column(self):
 
@@ -79,9 +164,9 @@ class RouteGenerator:
 
         return None
 
-    
+    # =========================================================
     # CONDUCTORES POR ZONA
-    
+    # =========================================================
 
     def _get_drivers_by_zone(self, postal_code):
 
@@ -93,15 +178,19 @@ class RouteGenerator:
             if self._normalize(driver.zone) == postal_code
         ]
 
-    
+    # =========================================================
     # PORTALES DE UNA ZONA
-    
+    # =========================================================
 
     def _get_streets_by_zone(self, postal_code):
 
         postal_code = self._normalize(postal_code)
 
         df = self.addresses.copy()
+
+        # -----------------------------------------------------
+        # NORMALIZAR CÓDIGO POSTAL
+        # -----------------------------------------------------
 
         df["_POSTAL"] = (
             df["COD_POSTAL"]
@@ -111,6 +200,13 @@ class RouteGenerator:
         df = df[
             df["_POSTAL"] == postal_code
         ]
+
+        if df.empty:
+            return pd.DataFrame()
+
+        # -----------------------------------------------------
+        # COLUMNAS
+        # -----------------------------------------------------
 
         portal_column = self._find_portal_column()
         qualifier_column = self._find_qualifier_column()
@@ -171,18 +267,22 @@ class RouteGenerator:
         streets = df[columns].copy()
 
         # -----------------------------------------------------
-        # COORDENADAS NUMÉRICAS
+        # COORDENADAS
         # -----------------------------------------------------
 
-        streets["LATITUD"] = pd.to_numeric(
-            streets["LATITUD"],
-            errors="coerce"
+        streets["LATITUD"] = (
+            streets["LATITUD"]
+            .apply(self._dms_to_decimal)
         )
 
-        streets["LONGITUD"] = pd.to_numeric(
-            streets["LONGITUD"],
-            errors="coerce"
+        streets["LONGITUD"] = (
+            streets["LONGITUD"]
+            .apply(self._dms_to_decimal)
         )
+
+        # -----------------------------------------------------
+        # ELIMINAR FILAS SIN DATOS VÁLIDOS
+        # -----------------------------------------------------
 
         streets = streets.dropna(
             subset=[
@@ -191,6 +291,9 @@ class RouteGenerator:
                 "LONGITUD"
             ]
         )
+
+        if streets.empty:
+            return pd.DataFrame()
 
         # -----------------------------------------------------
         # NORMALIZACIÓN
@@ -226,13 +329,6 @@ class RouteGenerator:
         # -----------------------------------------------------
         # ELIMINAR DUPLICADOS REALES
         # -----------------------------------------------------
-        #
-        # IMPORTANTE:
-        #
-        # 1 A y 1 B NO son duplicados.
-        #
-        # Por eso el calificador forma parte de la clave.
-        #
 
         streets = streets.drop_duplicates(
             subset=[
@@ -246,9 +342,9 @@ class RouteGenerator:
 
         return streets.reset_index(drop=True)
 
-    
+    # =========================================================
     # ASIGNACIÓN DE PORTALES A CONDUCTORES
-    
+    # =========================================================
 
     def _assign_streets_by_proximity(
         self,
@@ -327,7 +423,7 @@ class RouteGenerator:
             return assignments
 
         # -----------------------------------------------------
-        # ORDENAMOS CLUSTERS POR CENTRO GEOGRÁFICO
+        # ORDENAR CLUSTERS
         # -----------------------------------------------------
 
         centers = kmeans.cluster_centers_
@@ -369,9 +465,9 @@ class RouteGenerator:
 
         return assignments
 
-    
+    # =========================================================
     # DISTANCIA
-    
+    # =========================================================
 
     @staticmethod
     def _distance(
@@ -387,9 +483,9 @@ class RouteGenerator:
             (longitude_2 - longitude_1) ** 2
         ) ** 0.5
 
-    
+    # =========================================================
     # ORDENAR RUTAS DE UN CONDUCTOR
-    
+    # =========================================================
 
     def _order_driver_routes(
         self,
@@ -440,9 +536,9 @@ class RouteGenerator:
 
         return ordered
 
-    
+    # =========================================================
     # CREAR RUTAS
-    
+    # =========================================================
 
     def create_routes(self):
 
@@ -458,10 +554,17 @@ class RouteGenerator:
             .tolist()
         )
 
+        # Evitar CP vacío o artificial
+        postal_codes = [
+            postal_code
+            for postal_code in postal_codes
+            if postal_code and postal_code != "00000"
+        ]
+
         all_assignments = []
 
         # -----------------------------------------------------
-        # ASIGNAMOS LOS PORTALES A CONDUCTORES
+        # ASIGNAR PORTALES A CONDUCTORES
         # -----------------------------------------------------
 
         for postal_code in postal_codes:
@@ -508,7 +611,7 @@ class RouteGenerator:
                 )
 
         # -----------------------------------------------------
-        # ORDENAMOS POR CONDUCTOR
+        # AGRUPAR POR CONDUCTOR
         # -----------------------------------------------------
 
         assignments_by_driver = {}

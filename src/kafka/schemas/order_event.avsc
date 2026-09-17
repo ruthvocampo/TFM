@@ -13,7 +13,7 @@
     },
     {
       "name": "id_driver",
-      "type": "string"
+      "type": ["null", "string"]
     },
     {
       "name": "type_service",

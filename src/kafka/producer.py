@@ -1,5 +1,16 @@
+import os
 from pathlib import Path
+from datetime import datetime, timezone
 from dotenv import load_dotenv
+from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.serialization import SerializationContext, MessageField
+from confluent_kafka.schema_registry import SchemaRegistryClient, Schema
+from confluent_kafka.schema_registry.avro import AvroSerializer
+from confluent_kafka.serialization import SerializationContext, MessageField
+from confluent_kafka.schema_registry import SchemaRegistryClient, Schema
+
+from pathlib import Path
 
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
@@ -12,16 +23,54 @@ from confluent_kafka.schema_registry.avro import AvroSerializer
 class KafkaProducer:
 
     def __init__(self):
+        self.config = self.read_config()
 
-        load_dotenv()
+        # ---------------------------------------------------------
+        # Kafka
+        # ---------------------------------------------------------
+        # CARGAR .ENV DESDE LA RAÍZ DEL PROYECTO
 
-        bootstrap_servers = os.getenv("CONFLUENT_BOOTSTRAP_SERVERS")
-        kafka_api_key = os.getenv("CONFLUENT_API_KEY")
-        kafka_api_secret = os.getenv("CONFLUENT_API_SECRET")
+        base_dir = Path(__file__).resolve().parents[2]
+        env_path = base_dir / ".env"
 
-        schema_registry_url = os.getenv("SCHEMA_REGISTRY_URL")
-        schema_registry_api_key = os.getenv("SCHEMA_REGISTRY_API_KEY")
-        schema_registry_api_secret = os.getenv("SCHEMA_REGISTRY_API_SECRET")
+        print(f"[ENV] Buscando .env en: {env_path}")
+
+        if not env_path.exists():
+            raise FileNotFoundError(
+                f"No se ha encontrado el archivo .env: {env_path}"
+            )
+        print("ENCONTRADO")
+        load_dotenv(env_path, override=True)
+
+        # VARIABLES KAFKA
+
+        bootstrap_servers = os.getenv(
+            "CONFLUENT_BOOTSTRAP_SERVERS"
+        )
+
+        kafka_api_key = os.getenv(
+            "CONFLUENT_API_KEY"
+        )
+
+        kafka_api_secret = os.getenv(
+            "CONFLUENT_API_SECRET"
+        )
+
+        # VARIABLES SCHEMA REGISTRY
+
+        schema_registry_url = os.getenv(
+            "SCHEMA_REGISTRY_URL"
+        )
+
+        schema_registry_api_key = os.getenv(
+            "SCHEMA_REGISTRY_API_KEY"
+        )
+
+        schema_registry_api_secret = os.getenv(
+            "SCHEMA_REGISTRY_API_SECRET"
+        )
+
+        # VALIDAR VARIABLES
 
         required = {
             "CONFLUENT_BOOTSTRAP_SERVERS": bootstrap_servers,
@@ -44,6 +93,10 @@ class KafkaProducer:
                 + ", ".join(missing)
             )
 
+        print("[ENV] Variables de entorno cargadas correctamente")
+
+        # KAFKA CONFIG
+
         kafka_config = {
             "bootstrap.servers": bootstrap_servers,
             "security.protocol": "SASL_SSL",
@@ -52,15 +105,19 @@ class KafkaProducer:
             "sasl.password": kafka_api_secret,
             "client.id": "logistics-simulator",
         }
+        
 
         self.producer = Producer(kafka_config)
         self.admin_client = AdminClient(kafka_config)
 
+        # ---------------------------------------------------------
+        # Schema Registry
+        # ---------------------------------------------------------
         schema_registry_config = {
-            "url": schema_registry_url,
+            "url": self.config["SCHEMA_REGISTRY_URL"],
             "basic.auth.user.info": (
-                f"{schema_registry_api_key}:"
-                f"{schema_registry_api_secret}"
+                f'{self.config["SCHEMA_REGISTRY_API_KEY"]}:'
+                f'{self.config["SCHEMA_REGISTRY_API_SECRET"]}'
             ),
         }
 
@@ -68,8 +125,11 @@ class KafkaProducer:
             schema_registry_config
         )
 
+        # ---------------------------------------------------------
+        # Avro serializers
+        # ---------------------------------------------------------
         base_dir = Path(__file__).resolve().parents[2]
-        schemas_dir = base_dir / "src" / "kafka" / "schemas"
+        schemas_dir = base_dir / "src"/"kafka"/"schemas"
 
         self.serializers = {}
 
@@ -77,12 +137,14 @@ class KafkaProducer:
             "order-events": schemas_dir / "order_event.avsc",
             "gps-events": schemas_dir / "gps_event.avsc",
             "incident-events": schemas_dir / "incident_event.avsc",
+       
         }
 
         for topic, schema_path in schema_files.items():
             self.serializers[topic] = self.create_serializer(
                 topic,
-                schema_path)
+                schema_path
+            )
 
     # =============================================================
     # CONFIG
@@ -91,8 +153,7 @@ class KafkaProducer:
     def read_config(self):
         config = {}
 
-        env_path = load_dotenv()
-
+        env_path = Path(".env")
 
         if not env_path.exists():
             raise FileNotFoundError(
@@ -152,8 +213,7 @@ class KafkaProducer:
         #
         # order-events-value
         # gps-events-value
-        # ...
-        #
+   
         subject = f"{topic}-value"
 
         schema = Schema(

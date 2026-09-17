@@ -110,49 +110,14 @@ class OrderEvents:
     # ============================================================
 
     def find_driver_and_route_for_order(self, order):
-
         candidates = []
 
-        for driver in self.drivers:
+        for route in self.routes:
+            driver_id = getattr(route, "id_driver", None)
+            route_id = getattr(route, "id_route", None)
 
-            driver_id = getattr(
-                driver,
-                "id_driver",
-                None
-            )
-
-            if driver_id is None:
-                continue
-
-            # Solo rutas pertenecientes a ese driver.
-            driver_routes = [
-                route
-                for route in self.routes
-                if getattr(
-                    route,
-                    "id_driver",
-                    None
-                ) == driver_id
-            ]
-
-            if not driver_routes:
-                continue
-
-            for route in driver_routes:
-
-                route_id = getattr(
-                    route,
-                    "id_route",
-                    None
-                )
-
-                if route_id is not None:
-                    candidates.append(
-                        (
-                            driver_id,
-                            route_id
-                        )
-                    )
+            if driver_id is not None and route_id is not None:
+                candidates.append((driver_id, route_id))
 
         if not candidates:
             return None, None

@@ -64,7 +64,7 @@ def main():
     fecha_inicial = datetime(
         2026,
         9,
-        16,
+        17,
         6,
         0
     )

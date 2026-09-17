@@ -106,16 +106,16 @@ class Simulator:
     # INITIAL DATA
     def generate_initial_data(self):
         self._load_addresses()
-        # ============================================================
+
         # DIRECCIONES
-        # ============================================================
+
 
         # Mantén aquí exactamente tu código original
         # de carga de addresses_madrid y addresses_spain.
 
-        # ============================================================
+
         # DRIVERS
-        # ============================================================
+
 
         self.drivers = DriverGenerator(
             [],
@@ -123,9 +123,9 @@ class Simulator:
         ).create_drivers(270)
 
 
-        # ============================================================
+
         # RUTAS
-        # ============================================================
+
 
         self.routes = RouteGenerator(
             self.drivers,
@@ -133,9 +133,9 @@ class Simulator:
             self.fecha_actual
         ).create_routes()
 
-        # ============================================================
+
         # HISTÓRICO
-        # ============================================================
+
 
         self.historical_generator = (
             OrderHistoricalGenerator(self.drivers,
@@ -144,8 +144,8 @@ class Simulator:
                 self.fecha_actual)
         )
 
-        self.historical_orders = self.historical_generator.create_historical(600000,32400)
-        #self.historical_orders = self.historical_generator.create_historical(100,today_orders=20)
+        #elf.historical_orders = self.historical_generator.create_historical(6000,today_orders=200)
+        self.historical_orders = self.historical_generator.create_historical(100,today_orders=20)
         from collections import Counter
 
         print(
@@ -163,9 +163,9 @@ class Simulator:
                 for order in self.historical_orders
             )
         )
-        # ============================================================
+
         # PEDIDOS DEL DÍA
-        # ============================================================
+
 
         self.order_generator = OrderGenerator(
             self.historical_orders,
@@ -176,10 +176,10 @@ class Simulator:
             self.order_generator.get_orders_for_today()
         )
 
-        # ============================================================
+
         # EVENTOS
-        # ============================================================
-        # ============================================================
+
+
 
         self._create_event_generators()
         
@@ -1853,7 +1853,7 @@ class Simulator:
             end_time = (
                 self.fecha_actual
                 .replace(
-                    hour=23,
+                    hour=21,
                     minute=59,
                     second=0,
                     microsecond=0
